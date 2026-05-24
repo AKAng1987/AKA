@@ -2504,21 +2504,26 @@ def main() -> None:
             fig_3a.add_trace(go.Bar(
                 x=gdp_3a["qend"], y=gdp_3a["gdp_pct"],
                 marker_color=bar_colors_3a, name="BEA (latest vintage)",
-                width=60 * 24 * 3600 * 1000 * 70,  # ~70-day wide bars in ms
+                width=80 * 24 * 3600 * 1000,  # 80 days in ms — discrete quarterly bars
             ))
             if not gdpnow_df.empty:
                 gdpnow_3a = gdpnow_df[gdpnow_df["date"] >= cutoff_3a].sort_values("date")
                 fig_3a.add_trace(go.Scatter(
                     x=gdpnow_3a["date"], y=gdpnow_3a["gdpnow"],
-                    mode="lines", name="GDPNow (Atlanta Fed)",
-                    line=dict(color="#F59E0B", width=2, dash="dot"),
+                    mode="lines+markers", name="GDPNow (Atlanta Fed)",
+                    line=dict(color="#22d3ee", width=3),
+                    marker=dict(size=4, color="#22d3ee"),
                 ))
             fig_3a.add_hline(y=0, line_color="#4B5563", line_width=1)
+            _x_end_3a = pd.Timestamp(gdp_3a["qend"].max())
+            if not gdpnow_df.empty:
+                _x_end_3a = max(_x_end_3a, pd.Timestamp(gdpnow_df["date"].max()))
+            _x_end_3a = _x_end_3a + pd.DateOffset(days=90)
             fig_3a.update_layout(
                 **_DARK, height=300,
                 title=dict(text="3a. BEA Quarterly GDP (bars, quarter-end) vs GDPNow Real-Time Nowcast (line)",
                            font=dict(size=11, color="#9CA3AF")),
-                xaxis=dict(gridcolor="#1F2937"),
+                xaxis=dict(gridcolor="#1F2937", range=["2018-01-01", str(_x_end_3a.date())]),
                 yaxis=dict(gridcolor="#1F2937", title="% annualized"),
             )
             fig_3a.update_layout(legend=dict(bgcolor="rgba(0,0,0,0)", font=dict(size=10)))
@@ -2529,10 +2534,16 @@ def main() -> None:
                 vint_df = macro_data.fetch_gdp_vintages(force=force)
                 if not vint_df.empty:
                     vint_df = vint_df.sort_values(["quarter", "vintage"]).copy()
-                    # Quarter-end labels for x-axis
+                    # Quarter-end labels for x-axis; quarter label + release date for hover
                     vint_df["qend"] = (
                         vint_df["quarter"] + pd.DateOffset(months=2) + pd.offsets.MonthEnd(0)
                     )
+                    vint_df["q_label"] = vint_df["quarter"].apply(
+                        lambda d: f"Q{(pd.Timestamp(d).month - 1) // 3 + 1}-{pd.Timestamp(d).year}"
+                    )
+                    vint_df["release_date_str"] = pd.to_datetime(
+                        vint_df["release_date"]
+                    ).dt.strftime("%Y-%m-%d")
                     vintage_colors = {"Advance": "#60A5FA", "Second": "#F59E0B", "Third": "#A78BFA"}
                     fig_3b = go.Figure()
                     for vname in ["Advance", "Second", "Third"]:
@@ -2544,6 +2555,12 @@ def main() -> None:
                             y=sub_v["value"],
                             name=vname,
                             marker_color=vintage_colors[vname],
+                            customdata=sub_v[["q_label", "release_date_str", "value"]].values,
+                            hovertemplate=(
+                                "%{customdata[0]} " + vname
+                                + " · Released %{customdata[1]}"
+                                + " · %{customdata[2]:.1f}%<extra></extra>"
+                            ),
                         ))
                     fig_3b.add_hline(y=0, line_color="#4B5563", line_width=1)
                     fig_3b.update_layout(
