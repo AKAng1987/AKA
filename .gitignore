@@ -6,3 +6,6 @@ __pycache__/
 *.xlsx
 *.log
 .env
+cache/
+data_download/
+.streamlit/secrets.toml
