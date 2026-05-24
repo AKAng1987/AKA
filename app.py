@@ -2562,11 +2562,51 @@ def main() -> None:
                                 + " · %{customdata[2]:.1f}%<extra></extra>"
                             ),
                         ))
+                    # ── GDPNow final-pre-Advance overlay ───────────────────
+                    if not gdpnow_df.empty:
+                        _gn_ts = gdpnow_df.copy()
+                        _gn_ts["date"] = pd.to_datetime(_gn_ts["date"])
+                        _gn_ts = _gn_ts.sort_values("date")
+                        _adv = (
+                            vint_df[vint_df["vintage"] == "Advance"]
+                            [["quarter", "qend", "q_label", "release_date"]]
+                            .copy()
+                        )
+                        _adv["release_date"] = pd.to_datetime(_adv["release_date"])
+                        _ov_rows = []
+                        for _, _ar in _adv.iterrows():
+                            _pre = _gn_ts[_gn_ts["date"] < _ar["release_date"]]
+                            if _pre.empty:
+                                continue
+                            _last = _pre.iloc[-1]
+                            _ov_rows.append({
+                                "qend":     _ar["qend"],
+                                "q_label":  _ar["q_label"],
+                                "gdpnow":   float(_last["gdpnow"]),
+                                "date_str": _last["date"].strftime("%Y-%m-%d"),
+                            })
+                        if _ov_rows:
+                            _ov_df = pd.DataFrame(_ov_rows)
+                            fig_3b.add_trace(go.Scatter(
+                                x=_ov_df["qend"],
+                                y=_ov_df["gdpnow"],
+                                mode="markers",
+                                name="GDPNow (final pre-Advance)",
+                                marker=dict(
+                                    symbol="diamond", size=12, color="#fbbf24",
+                                    line=dict(color="#111827", width=1),
+                                ),
+                                customdata=_ov_df[["date_str", "gdpnow"]].values,
+                                hovertemplate=(
+                                    "GDPNow final · %{customdata[0]}"
+                                    " · %{customdata[1]:.1f}%<extra></extra>"
+                                ),
+                            ))
                     fig_3b.add_hline(y=0, line_color="#4B5563", line_width=1)
                     fig_3b.update_layout(
                         **_DARK, height=280, barmode="group",
                         title=dict(
-                            text="3b. Three BEA Estimates per Quarter (ALFRED) — Advance / Second / Third",
+                            text="3b. Three BEA Estimates per Quarter (ALFRED) — Advance / Second / Third  ◆ GDPNow final pre-Advance",
                             font=dict(size=11, color="#9CA3AF"),
                         ),
                         xaxis=dict(gridcolor="#1F2937"),
