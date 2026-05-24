@@ -2520,8 +2520,8 @@ def main() -> None:
                            font=dict(size=11, color="#9CA3AF")),
                 xaxis=dict(gridcolor="#1F2937"),
                 yaxis=dict(gridcolor="#1F2937", title="% annualized"),
-                legend=dict(bgcolor="rgba(0,0,0,0)", font=dict(size=10)),
             )
+            fig_3a.update_layout(legend=dict(bgcolor="rgba(0,0,0,0)", font=dict(size=10)))
             st.plotly_chart(fig_3a, use_container_width=True)
 
             # ── 3b: Three sequential BEA estimates per quarter (ALFRED) ─────────
@@ -2554,8 +2554,8 @@ def main() -> None:
                         ),
                         xaxis=dict(gridcolor="#1F2937"),
                         yaxis=dict(gridcolor="#1F2937", title="% annualized"),
-                        legend=dict(bgcolor="rgba(0,0,0,0)", font=dict(size=10)),
                     )
+                    fig_3b.update_layout(legend=dict(bgcolor="rgba(0,0,0,0)", font=dict(size=10)))
                     st.plotly_chart(fig_3b, use_container_width=True)
                     # Warn if ALFRED gaps detected
                     expected_vintages = 3
