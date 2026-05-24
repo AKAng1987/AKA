@@ -1,0 +1,92 @@
+# FOMC SEP Dot Plot — update after each quarterly SEP release (Mar/Jun/Sep/Dec FOMC).
+# Source: March 2026 SEP, fomcprojtabl20260318.pdf, Figure 2. Updated 2026-05-24.
+#
+# To update after the next SEP release:
+#   1. Open the "Projection Materials" PDF from:
+#      https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm
+#   2. Read Figure 2: "Appropriate Monetary Policy: Target Federal Funds Rate at Year-End"
+#   3. Replace all rows below with the new dot counts, keeping participant IDs 1-N
+#      sequential per year. Horizons: 2026/2027/2028/LR (LR = Longer Run).
+#
+# Columns:
+#   year          : projection horizon — one of: 2026, 2027, 2028, LR
+#   participant_id: integer 1-N (anonymized; sequential per horizon)
+#   projected_rate: fed funds rate in percent, e.g. 3.75 or 4.000
+#
+year,participant_id,projected_rate
+2026,1,4.000
+2026,2,3.750
+2026,3,3.750
+2026,4,3.750
+2026,5,3.750
+2026,6,3.750
+2026,7,3.750
+2026,8,3.750
+2026,9,3.750
+2026,10,3.625
+2026,11,3.625
+2026,12,3.625
+2026,13,3.625
+2026,14,3.625
+2026,15,3.375
+2026,16,3.375
+2026,17,3.375
+2026,18,3.000
+2026,19,2.750
+2027,1,4.000
+2027,2,3.750
+2027,3,3.750
+2027,4,3.750
+2027,5,3.750
+2027,6,3.750
+2027,7,3.625
+2027,8,3.625
+2027,9,3.625
+2027,10,3.625
+2027,11,3.625
+2027,12,3.500
+2027,13,3.500
+2027,14,3.500
+2027,15,3.500
+2027,16,3.375
+2027,17,3.375
+2027,18,3.000
+2027,19,2.750
+2028,1,4.000
+2028,2,3.750
+2028,3,3.750
+2028,4,3.750
+2028,5,3.625
+2028,6,3.625
+2028,7,3.625
+2028,8,3.625
+2028,9,3.625
+2028,10,3.500
+2028,11,3.500
+2028,12,3.500
+2028,13,3.500
+2028,14,3.500
+2028,15,3.375
+2028,16,3.375
+2028,17,3.375
+2028,18,3.125
+2028,19,2.875
+LR,1,3.500
+LR,2,3.500
+LR,3,3.375
+LR,4,3.375
+LR,5,3.375
+LR,6,3.250
+LR,7,3.250
+LR,8,3.125
+LR,9,3.125
+LR,10,3.125
+LR,11,3.000
+LR,12,3.000
+LR,13,3.000
+LR,14,3.000
+LR,15,3.000
+LR,16,3.000
+LR,17,2.875
+LR,18,2.875
+LR,19,2.875
