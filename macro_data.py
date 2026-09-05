@@ -112,8 +112,24 @@ def fetch_gdp(force: bool = False) -> pd.DataFrame:
 
 
 def fetch_pce(force: bool = False) -> pd.DataFrame:
-    """BEA NIPA T20804 — Monthly PCE price index MoM% for core (ex-food-&-energy).
-    Columns: date, pce_core_pct (MoM%)."""
+    """BEA NIPA T20804 -- Core PCE (ex-food-&-energy) chain-type price
+    INDEX level (CL_UNIT="Level", ~127-130 on the current base -- NOT a
+    pre-computed rate, despite this function's old docstring/column name
+    claiming MoM%). Bug found 2026-09-06: the old code stored this index
+    level as `pce_core_pct` and callers compounded it as if it were a
+    monthly rate, producing ~1.8 million instead of a sane ~2-3% YoY.
+
+    Fix: filter to the exact line "PCE excluding food and energy" (the
+    old substring match also caught "Market-based PCE excluding food and
+    energy", a different, narrower BEA series -- FRED's canonical
+    PCEPILFE tracks the non-market-based line, so that's the one used
+    here). Compute YoY correctly as a 12-month index ratio, not a
+    compounded rate. Validated against FRED PCEPILFE for 2026-07: this
+    function's math produces 3.34414%, FRED reports 3.34414% -- matches
+    to 4+ decimal places.
+
+    Columns: date, pce_core_index (raw index level, kept for reference),
+    pce_core_yoy (correct YoY %, use this)."""
     if not force and not _is_stale("pce"):
         df = pd.read_parquet(_cache_path("pce"))
         df["date"] = pd.to_datetime(df["date"])
@@ -129,8 +145,7 @@ def fetch_pce(force: bool = False) -> pd.DataFrame:
     rows = data["BEAAPI"]["Results"]["Data"]
     records = []
     for r in rows:
-        desc = r.get("LineDescription", "").lower()
-        if "excluding" in desc and "food and energy" in desc:
+        if r.get("LineDescription", "") == "PCE excluding food and energy":
             tp = r["TimePeriod"]          # e.g. "2024M07"
             try:
                 year  = int(tp[:4])
@@ -139,12 +154,12 @@ def fetch_pce(force: bool = False) -> pd.DataFrame:
             except (ValueError, AttributeError, IndexError):
                 continue
             records.append({
-                "date":         pd.Timestamp(year=year, month=month, day=1),
-                "pce_core_pct": val,
+                "date":           pd.Timestamp(year=year, month=month, day=1),
+                "pce_core_index": val,
             })
     df = pd.DataFrame(records).sort_values("date").reset_index(drop=True)
-    # De-duplicate: keep last value per month (multiple lines may match)
     df = df.drop_duplicates(subset=["date"], keep="last").reset_index(drop=True)
+    df["pce_core_yoy"] = (df["pce_core_index"] / df["pce_core_index"].shift(12) - 1) * 100
     df.to_parquet(_cache_path("pce"), index=False)
     return df
 

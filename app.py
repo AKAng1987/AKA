@@ -2724,12 +2724,11 @@ def main() -> None:
         try:
             pce_df = macro_data.fetch_pce(force=force)
             if not pce_df.empty:
+                # pce_core_yoy is now computed correctly inside fetch_pce()
+                # itself (2026-09-06 fix) -- was previously recomputed here
+                # via a compounding transform that incorrectly treated the
+                # raw BEA index level as if it were already a monthly rate.
                 pce_df = pce_df.sort_values("date").reset_index(drop=True)
-                pce_df["pce_core_yoy"] = (
-                    (1 + pce_df["pce_core_pct"] / 100)
-                    .rolling(12)
-                    .apply(lambda x: x.prod() - 1, raw=True)
-                ) * 100
                 pce_cutoff  = pd.Timestamp.now() - pd.DateOffset(years=10)
                 pce_plot    = pce_df[pce_df["date"] >= pce_cutoff].dropna(subset=["pce_core_yoy"])
                 fig_pce = go.Figure()
