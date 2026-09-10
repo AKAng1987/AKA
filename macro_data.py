@@ -300,7 +300,19 @@ def fetch_treasury_curve(force: bool = False) -> pd.DataFrame:
 
 def fetch_spreads(force: bool = False) -> pd.DataFrame:
     """FRED T10Y2Y and BAMLH0A0HYM2 — 20-year lookback.
-    Columns: date, T10Y2Y (%), HY_Spread (bp)."""
+    Columns: date, T10Y2Y (%), HY_Spread (bp).
+
+    BAMLH0A0HYM2 is published by FRED in percent, not bp (verified
+    live against FRED 2026-09-10: series metadata units="Percent",
+    e.g. 2.71 on 2026-09-09). Every consumer of this column (this
+    docstring, the Streamlit chart's legend/axis, and the Next.js
+    RatesSection chart) has always labeled it "(bp)" -- the original
+    bug was fetching the raw percent value with no x100 conversion,
+    so the chart displayed e.g. "2.71 bp" for what was actually a
+    271bp spread, a 100x understatement of credit risk. Fixed here at
+    the source rather than relabeling three separate display sites to
+    "(%)", since bp is the correct convention for quoting a credit
+    OAS spread and matches what every label already said."""
     if not force and not _is_stale("spreads"):
         df = pd.read_parquet(_cache_path("spreads"))
         df["date"] = pd.to_datetime(df["date"])
@@ -311,7 +323,10 @@ def fetch_spreads(force: bool = False) -> pd.DataFrame:
     for sid, label in [("T10Y2Y", "T10Y2Y"), ("BAMLH0A0HYM2", "HY_Spread")]:
         df_s = _fred_get(sid, observation_start=start)
         if not df_s.empty:
-            dfs[label] = df_s.set_index("date")["value"]
+            series = df_s.set_index("date")["value"]
+            if label == "HY_Spread":
+                series = series * 100.0  # FRED percent -> bp
+            dfs[label] = series
 
     wide = pd.DataFrame(dfs).sort_index().reset_index().rename(columns={"index": "date"})
     wide.to_parquet(_cache_path("spreads"), index=False)
