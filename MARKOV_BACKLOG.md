@@ -64,10 +64,14 @@ that's already the component whose entire job is comparing a live
 market-implied read against the discrete print-confirmed state, so a
 fresh macro snapshot belongs there rather than duplicated into Phase 1.
 
-## 4. Phase 2 divergence Lambda: "skipped" is silent — OPEN
+## 4. Phase 2 divergence Lambda: "skipped" is silent — DONE (2026-09-15)
 
 **Flagged**: 2026-09-15, post-deploy self-review.
-**Status**: Open, low urgency.
+**Status**: Shipped same night. Metric filter `divergence-skipped` on the
+Lambda log group (`?"-- abort" ?"-- skipping"`) → `CmonStage/Alerts`
+`DivergenceUpdaterSkipped` → alarm `cmon-stage-regime-divergence-updater-skipped`
+(≥1/24h → ops-alerts SNS). Filter verified against the handler's exact
+log strings with `test-metric-filter`.
 
 `regime-divergence-updater` returns `{"status": "skipped", ...}` (no
 exception) when Phase 1's row for the date is missing, inputs are
