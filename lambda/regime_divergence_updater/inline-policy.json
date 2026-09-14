@@ -1,0 +1,29 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "Logs",
+            "Effect": "Allow",
+            "Action": ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"],
+            "Resource": "arn:aws:logs:ap-southeast-1:369568916817:log-group:/aws/lambda/cmon-stage-backend-regime-divergence-updater*"
+        },
+        {
+            "Sid": "QueryPriceHistory",
+            "Effect": "Allow",
+            "Action": "dynamodb:Query",
+            "Resource": "arn:aws:dynamodb:ap-southeast-1:369568916817:table/cmon-stage-backend-price-history"
+        },
+        {
+            "Sid": "FindAndUpdatePhase1Row",
+            "Effect": "Allow",
+            "Action": ["dynamodb:Scan", "dynamodb:UpdateItem"],
+            "Resource": "arn:aws:dynamodb:ap-southeast-1:369568916817:table/cmon-stage-backend-regime-signals"
+        },
+        {
+            "Sid": "ReadModelArtifact",
+            "Effect": "Allow",
+            "Action": "s3:GetObject",
+            "Resource": "arn:aws:s3:::cmon-stage-backend-369568916817-ap-southeast-1-reports/Cache/markov/models/*"
+        }
+    ]
+}

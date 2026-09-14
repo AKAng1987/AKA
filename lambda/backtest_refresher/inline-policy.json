@@ -1,0 +1,30 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "Logs",
+            "Effect": "Allow",
+            "Action": [
+                "logs:CreateLogGroup",
+                "logs:CreateLogStream",
+                "logs:PutLogEvents"
+            ],
+            "Resource": "arn:aws:logs:ap-southeast-1:369568916817:log-group:/aws/lambda/cmon-stage-backend-backtest-refresher*"
+        },
+        {
+            "Sid": "QueryPriceAndModelHistory",
+            "Effect": "Allow",
+            "Action": "dynamodb:Query",
+            "Resource": [
+                "arn:aws:dynamodb:ap-southeast-1:369568916817:table/cmon-stage-backend-price-history",
+                "arn:aws:dynamodb:ap-southeast-1:369568916817:table/cmon-stage-backend-model-history"
+            ]
+        },
+        {
+            "Sid": "WriteBacktestCache",
+            "Effect": "Allow",
+            "Action": "s3:PutObject",
+            "Resource": "arn:aws:s3:::cmon-stage-backend-369568916817-ap-southeast-1-reports/Cache/backtest/*"
+        }
+    ]
+}
