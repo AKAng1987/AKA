@@ -44,12 +44,13 @@ EOF
 
 echo "-- divergence-updater latest invocation --"
 LG=/aws/lambda/cmon-stage-backend-regime-divergence-updater
-STREAM=$(aws logs describe-log-streams --region $R --log-group-name $LG --order-by LastEventTime --descending --max-items 1 --query 'logStreams[0].logStreamName' --output text 2>/dev/null)
-if [ -z "$STREAM" ] || [ "$STREAM" = "None" ]; then
-  bad "no log streams"
+SINCE=$(python3 -c "import time; print(int((time.time()-24*3600)*1000))")
+LINES=$(aws logs filter-log-events --region $R --log-group-name $LG --start-time "$SINCE" --query 'events[].message' --output text 2>/dev/null \
+  | grep -E "start signal_date|wrote experimental|-- abort|-- skipping|ERROR|Traceback|REPORT" | cut -c1-160)
+if [ -z "$LINES" ]; then
+  bad "no invocation logged in the last 24h"
 else
-  aws logs get-log-events --region $R --log-group-name $LG --log-stream-name "$STREAM" --limit 40 --query 'events[].message' --output text 2>/dev/null \
-    | grep -E "start signal_date|wrote experimental|-- abort|-- skipping|ERROR|Traceback|REPORT" | sed 's/^/    /' | cut -c1-160
+  echo "$LINES" | sed 's/^[[:space:]]*/    /'
 fi
 
 echo "-- alarms --"
