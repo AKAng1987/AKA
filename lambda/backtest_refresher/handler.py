@@ -60,7 +60,7 @@ BLOB_KEY = "Cache/backtest/occurrences.json"
 
 # Bump whenever the occurrence/stat computation logic changes -- Render
 # read-side callers compare this against their own expected version.
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2  # 2: trend-at-entry fields on each occurrence (BACKTEST v2 step 1)
 
 _logger = logging.getLogger("backtest_refresher")
 _logger.setLevel(logging.INFO)
@@ -223,7 +223,60 @@ def build_regime_periods(grid_rows: list[dict], compass_rows: list[dict]) -> lis
     return periods
 
 
-def get_occurrences(prices: list[dict], periods: list[dict], grid_q: int, compass_q: int) -> list[dict]:
+TREND_LOOKBACK = 20   # trading rows for the pre-entry return
+SMA_WINDOW = 50       # trading rows for the moving average at entry
+
+
+def build_trend_context(prices: list[dict]) -> dict:
+    """Per-ticker, once: date -> index, plus the ticker's own distribution
+    of 20-row returns so an entry's pre-entry return can be expressed as a
+    percentile *of this instrument's history* (BACKTEST v2 step 1,
+    MARKOV_BACKLOG.md item 8). "Extended" for VIX and "extended" for TLT
+    are very different absolute moves; the percentile makes them
+    comparable."""
+    idx = {r["date"]: i for i, r in enumerate(prices)}
+    closes = [r["close"] for r in prices]
+    rets = sorted(
+        closes[i] / closes[i - TREND_LOOKBACK] - 1.0
+        for i in range(TREND_LOOKBACK, len(closes))
+        if closes[i - TREND_LOOKBACK]
+    )
+    return {"idx": idx, "closes": closes, "rets_sorted": rets}
+
+
+def _pctile(sorted_vals: list[float], x: float) -> Optional[float]:
+    if not sorted_vals:
+        return None
+    lo, hi = 0, len(sorted_vals)
+    while lo < hi:
+        mid = (lo + hi) // 2
+        if sorted_vals[mid] < x:
+            lo = mid + 1
+        else:
+            hi = mid
+    return round(100.0 * lo / len(sorted_vals), 1)
+
+
+def trend_at_entry(ctx: dict, entry_date: str) -> dict:
+    """Fields describing where the instrument was when the regime began.
+    All None when there isn't enough prior history."""
+    i = ctx["idx"].get(entry_date)
+    closes = ctx["closes"]
+    out = {"pre_entry_ret_20d": None, "pre_entry_ret_20d_pctile": None, "above_sma50_at_entry": None}
+    if i is None:
+        return out
+    if i >= TREND_LOOKBACK and closes[i - TREND_LOOKBACK]:
+        r = closes[i] / closes[i - TREND_LOOKBACK] - 1.0
+        out["pre_entry_ret_20d"] = round(r * 100.0, 2)
+        out["pre_entry_ret_20d_pctile"] = _pctile(ctx["rets_sorted"], r)
+    if i >= SMA_WINDOW - 1:
+        sma = sum(closes[i - SMA_WINDOW + 1: i + 1]) / SMA_WINDOW
+        out["above_sma50_at_entry"] = bool(closes[i] > sma)
+    return out
+
+
+def get_occurrences(prices: list[dict], periods: list[dict], grid_q: int, compass_q: int,
+                    trend_ctx: Optional[dict] = None) -> list[dict]:
     if not prices or not periods:
         return []
 
@@ -249,7 +302,7 @@ def get_occurrences(prices: list[dict], periods: list[dict], grid_q: int, compas
         end_d = pp[-1]["date"]
         duration_days = (_date.fromisoformat(end_d) - _date.fromisoformat(start_d)).days
 
-        results.append({
+        occ = {
             "start_date": start_d,
             "end_date": end_d,
             "duration_days": duration_days,
@@ -258,7 +311,10 @@ def get_occurrences(prices: list[dict], periods: list[dict], grid_q: int, compas
             "high_pct": round((max_high / entry_close - 1.0) * 100.0, 2),
             "low_pct": round((min_low / entry_close - 1.0) * 100.0, 2),
             "return_pct": round((exit_close / entry_close - 1.0) * 100.0, 2),
-        })
+        }
+        if trend_ctx is not None:
+            occ.update(trend_at_entry(trend_ctx, start_d))
+        results.append(occ)
 
     return results
 
@@ -296,10 +352,11 @@ def _refresh_all(periods: list[dict]) -> tuple[dict, list[str], list[dict]]:
             if not prices:
                 raise ValueError(f"no price data found for {sym}")
 
+            trend_ctx = build_trend_context(prices)
             combos: dict[str, list[dict]] = {}
             for gq in range(1, 5):
                 for cq in range(1, 5):
-                    occ = get_occurrences(prices, periods, gq, cq)
+                    occ = get_occurrences(prices, periods, gq, cq, trend_ctx=trend_ctx)
                     if occ:
                         combos[_combo_key(gq, cq)] = occ
 
