@@ -128,3 +128,34 @@ vs 1.93x (engine) is NOT a formula difference (ratio-of-means,
 mean-of-ratios, median, leave-one-out all ≤2.26 on the same 7
 periods) — older regime-period vintage or price source; the engine
 number is the one verified against Streamlit + TradingView.
+
+## 8. BACKTEST v2: conditional Edge (trend / breadth / COT at entry) — OPEN
+
+**Flagged**: 2026-09-15 by user. Static Edge ignores whether the
+instrument had already run or collapsed before the regime change.
+**Status**: Open, ordered by cost.
+
+1. Trend state at entry (all data present): add `pre_entry_ret_20d` and
+   `above_sma50_at_entry` to each occurrence in the backtest Lambda; tab
+   splits Edge by extended / neutral / oversold. Directly answers "had it
+   already run."
+2. Breadth for the tracked ETF universe (% above 5d/20d MA — already in
+   `markov_features.py`). Net new highs/lows needs a constituent list
+   (S&P 500 members) which the pipeline does not track — partial.
+3. COT (CFTC weekly, free): new fetcher + futures→ETF map (ES→SPY,
+   CL→USO, NG→UNG, GC→GLD…). Its own session.
+Also parked: equity screener over constituents (e.g. XLU members) — user
+says BACKTEST already does the job for now.
+
+## 9. Markov Phase 1.5 (event-driven) shipped 2026-09-15; v2 = pre-register p_flip
+
+`api/release_calendar.py` + `api/markov_data.py` + rebuilt MARKOV tab.
+Forecast is one P(flip) per upcoming release (FOMC→liquidity,
+SLOOS→credit, CPI→inflation, GDP→growth), scored by Brier per release.
+Grid has 22 historical double-flip rows, all on GDP days (older model
+batched a prior CPI move) — split into two axis events each. The daily
+Phase 1 row is unchanged and shown as collapsed runs. **v2**: have
+regime-signal-updater write the four upcoming p_flip values onto the
+daily row so the quoted probability is pre-registered in DynamoDB, not
+recomputed by the API. Calendar dates hardcoded 2026 — verify against
+BLS/BEA/Fed when extending; FOMC 2027 can reuse macro_data's scrape.
