@@ -69,6 +69,8 @@ from typing import Optional
 
 import boto3
 
+import markov_events
+
 REGION = "ap-southeast-1"
 MODEL_TABLE = "cmon-stage-backend-model-history"
 PRICE_TABLE = "cmon-stage-backend-price-history"
@@ -256,9 +258,11 @@ def compute_signal(as_of: Optional[str] = None) -> dict:
     n_historical_spells = {}
     total_dwell_days_in_state = {}
     macro_prints_at_last_transition = {}
+    histories = {}
 
     for axis, model_name in AXES.items():
         history = query_full_history(model_name)
+        histories[axis] = history
         ctmc = build_ctmc(history)
 
         latest = get_latest_row(model_name, as_of=signal_date)
@@ -282,6 +286,16 @@ def compute_signal(as_of: Optional[str] = None) -> dict:
     spx_row = get_latest_spx_close(as_of=signal_date)
     spx_close_at_signal = Decimal(str(spx_row["close"])) if spx_row else None
 
+    # Phase 1.5 pre-registration (MARKOV_BACKLOG.md item 9): one entry per
+    # upcoming release with history + market P(flip). Best-effort and
+    # additive -- if anything in it fails, the Phase 1 row is written
+    # exactly as before with this field absent.
+    upcoming_releases = None
+    try:
+        upcoming_releases = markov_events.build_upcoming(histories, regime_current_discrete, signal_date)
+    except Exception as exc:  # noqa: BLE001
+        print(f"[regime-signal-updater] upcoming_releases FAILED (Phase 1 fields unaffected): {exc!r}")
+
     result.update({
         "regime_current_discrete": regime_current_discrete,
         "top1_next_probability": top1_next_probability,
@@ -291,6 +305,7 @@ def compute_signal(as_of: Optional[str] = None) -> dict:
         "total_dwell_days_in_state": total_dwell_days_in_state,
         "macro_prints_at_last_transition": macro_prints_at_last_transition,
         "spx_close_at_signal": spx_close_at_signal,
+        "upcoming_releases": upcoming_releases,
     })
     return result
 
@@ -314,6 +329,8 @@ def write_signal(signal: dict, signal_id: Optional[str] = None) -> dict:
     }
     if signal.get("spx_close_at_signal") is not None:
         item["spx_close_at_signal"] = signal["spx_close_at_signal"]
+    if signal.get("upcoming_releases"):
+        item["upcoming_releases"] = signal["upcoming_releases"]
     table.put_item(Item=item)
     return item
 

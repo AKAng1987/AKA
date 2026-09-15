@@ -1,0 +1,30 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "Logs",
+            "Effect": "Allow",
+            "Action": [
+                "logs:CreateLogGroup",
+                "logs:CreateLogStream",
+                "logs:PutLogEvents"
+            ],
+            "Resource": "arn:aws:logs:ap-southeast-1:369568916817:log-group:/aws/lambda/cmon-stage-backend-regime-signal-updater*"
+        },
+        {
+            "Sid": "ReadModelAndPriceHistory",
+            "Effect": "Allow",
+            "Action": "dynamodb:Query",
+            "Resource": [
+                "arn:aws:dynamodb:ap-southeast-1:369568916817:table/cmon-stage-backend-model-history",
+                "arn:aws:dynamodb:ap-southeast-1:369568916817:table/cmon-stage-backend-price-history"
+            ]
+        },
+        {
+            "Sid": "WriteRegimeSignals",
+            "Effect": "Allow",
+            "Action": "dynamodb:PutItem",
+            "Resource": "arn:aws:dynamodb:ap-southeast-1:369568916817:table/cmon-stage-backend-regime-signals"
+        }
+    ]
+}
