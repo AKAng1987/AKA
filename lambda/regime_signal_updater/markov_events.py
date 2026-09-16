@@ -78,7 +78,7 @@ def _with(q: int, axis: str, s: int) -> int:
 def next_releases(after: str) -> list[dict]:
     out, seen = [], set()
     for r in CALENDAR:
-        if r["date"] <= after or r["type"] in seen:
+        if r["date"] < after or r["type"] in seen:  # same-day counts (00:55 UTC is before any US print)
             continue
         seen.add(r["type"])
         out.append(r)
