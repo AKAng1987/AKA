@@ -77,3 +77,65 @@ TradingView MCP also exposes economic series for other countries
 (`get_economic_symbols` with country=JP/EU/CN), the economic calendar,
 OHLCV, and the screener — the BOJ/ECB inputs and breadth columns for
 later factors are one call away.
+
+---
+
+## CREDIT — Compass axis, set by SLOOS
+
+**Framing (user, 2026-09-17).** Bank lending is the curve: banks borrow
+short and lend long, so 10y−2y is the base line for lending margin (the
+academic form is 10y−3m, since deposit costs track the policy rate; both
+tested, 10y−3m is cleaner). The user also reads 10y−3m steepening against
+credit default swaps — when it steepens, CDS rise. Bank stocks: KBE/SPY on
+the chart, with Compass labels; going C1→C2 has been bullish (Aug 2025,
+the Aug 2024 carry unwind) and C4 in 2022–23 was "a layup to volatility."
+Where else to base the read was open — candidates tested below.
+
+**Contract (built 2026-09-17).** 91-day SLOOS windows, 47 easing-state /
+42 tight-state windows since 2006.
+- inputs: `US10Y`, `US03MY` (us_treasury, daily); `BAA10Y` (fred, daily,
+  1986→); `KBE`, `SPY` (marketstack); `NFCICREDIT` (fred, weekly, 1971→,
+  onboarded today); `BUSLOANS` (fred, weekly H.8, 1947→, onboarded today).
+- drivers and what they said:
+
+  | driver | easing → tighten? lo/mid/hi | tight → loosen? lo/mid/hi |
+  |---|---|---|
+  | 10y−3m level | **53** / 25 / 19 — flat curve → tighten | 50 / 29 / 36 |
+  | Baa−10y 30d chg | 14 / 29 / **50** — widening → tighten | **57** / 29 / 29 — narrowing → loosen |
+  | KBE/SPY 30d | **50** / 27 / 20 — banks lagging → tighten | 38 / 54 / 23 |
+  | NFCI credit 13w chg | 27 / 6 / **62** — tightening → tighten | **71** / 29 / 14 — easing → loosen |
+  | C&I loans 13w % | 20 / 19 / **56** — post-boom → tighten | 50 / 43 / 21 |
+  | SPY 30d | **67** / 19 / 12 — drawdown → tighten | 29 / 64 / 21 |
+
+  Base rates 32% / 38%. Dropped after testing: 2s10s (level and change),
+  Baa−10y level, KRE (identical to KBE), XLF/SPY (Berkshire/JPM/V/MA
+  dominate — not lending-sensitive), NFCI level.
+- bank earnings: no daily series; the curve level is the standing proxy.
+  Bigdata.com's earnings-call tools are the candidate source if a
+  quarterly "loan-loss provisions / NIM commentary" read is wanted later.
+- use: Market column for the next SLOOS on the MARKOV tab.
+- today (2026-09-17): split — KBE −4% (50%), SPY −3% (67%), loans +10%
+  (56%) say tightening; curve mid, spreads narrowing (14%), NFCI flat
+  (6%) say no. Conditioned 36% vs 32% base. Price is worried, credit
+  markets aren't.
+
+**Curve language (agreed to add, 2026-09-17).** "Steepening" alone mixes
+two opposite worlds; the names say which end moved:
+
+| | short end | long end | bonds | typical cause |
+|---|---|---|---|---|
+| bull steepener | falls fast | flat/down a little | up | Fed cutting into weakness |
+| bear steepener | flat | rises fast | down | term premium, inflation/supply, fiscal |
+| bull flattener | flat | falls fast | up | flight to quality, growth scare |
+| bear flattener | rises fast | flat | down | Fed hiking (2022) |
+
+The user's CDS observation is the **bull** steepener: the curve steepens
+because the front end collapses as the Fed cuts into a downturn, which is
+when default risk reprices. H2 2023 bear-steepened just as much with CDS
+tight. Encoding: Δ(10y−3m) over 30d for magnitude, Δ(3m) over 30d for
+which end, and a derived four-way label tested like any other driver.
+To build next on this axis.
+
+**Also noted.** Challenger: 80–100K m/m spike = volatility, 150K =
+crisis — thresholds for the consequence/volatility side, not flip
+predictors (see Liquidity addendum).
