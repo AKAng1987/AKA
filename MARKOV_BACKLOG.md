@@ -159,3 +159,24 @@ regime-signal-updater write the four upcoming p_flip values onto the
 daily row so the quoted probability is pre-registered in DynamoDB, not
 recomputed by the API. Calendar dates hardcoded 2026 — verify against
 BLS/BEA/Fed when extending; FOMC 2027 can reuse macro_data's scrape.
+
+## 10. Decision-day FOMC banner on LIVE — before 2026-10-28
+
+**Flagged**: 2026-09-17, after the 09-16 hike took ~32h to reach the
+compass (DFEDTARU is dated by effective date and FRED publishes each
+observation the following US day; our 00:05 UTC pull sees it two runs
+later).
+**Status**: Open. Presentation fix, not a pipeline change.
+
+For the user's own use the lag is fine (the backtest adjusts). When
+showing others, LIVE saying C2 for a day after a hike reads as wrong.
+Cheapest honest fix: on FOMC days, fetch the statement
+(federalreserve.gov/newsevents/pressreleases/monetary{YYYYMMDD}a.htm,
+18:00 UTC; regex the "target range ... to X to Y percent" sentence),
+and show a banner above the Compass card: decision, direction, the
+quadrant the compass will move to, and that the record updates on
+FRED's next observation. Nothing written to price-history; FRED stays
+canonical. Optional later: write the effective-date DFEDTARU row from
+the statement and invoke compass-model-updater (rails: both bounds
+parse, 25bp-wide, within ±75bp, direction agrees with futures). Same
+fetch seeds the narratives agent.
