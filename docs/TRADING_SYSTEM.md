@@ -51,3 +51,29 @@ FedWatch tool.
   tightening state has too few windows since 2008-12 to score; extending
   history via `FEDFUNDS` (1954→) would fix that at the cost of using the
   effective rate instead of the target.
+
+### Addendum 2026-09-17 — Challenger job cuts, full history
+
+Source resolved: TradingView's official MCP exposes `ECONOMICS:USJC`
+(392 months, 1994-01→). Chart export is provider-locked but the
+economic-data endpoint is not. Every value cross-checks against the firm's
+own report archive (`scripts/scrape_challenger.py`, kept as the audit).
+Loaded as `CHALLENGER` (source `challenger_gray`, 1M); no free API, so
+the monthly refresh is an MCP pull, not a Lambda.
+
+Tested on the FOMC windows, both states:
+- **Easing (hike?)**: low Challenger → 14% flip vs 2% when high. m/m
+  rate of change: no separation. The Fed hikes into labor strength.
+- **Tightening (cut?)**: rising unemployment 38%, low CPI 53%, falling
+  front end 27–33% — all mandate-consistent. Challenger *low* → 53%,
+  *high* → 6%: the Fed cuts before the layoff count spikes (2001, 2008,
+  2020 all show the first cut months ahead of the 150K crossing).
+- **Conclusion on the 150K rule**: a severity marker for a regime
+  already flipped, not a trigger for the next flip. Keep it on the panel
+  as context; use rising UNRATE as the leading employment read, with
+  Challenger as a nowcast for next month's UNRATE (to build).
+
+TradingView MCP also exposes economic series for other countries
+(`get_economic_symbols` with country=JP/EU/CN), the economic calendar,
+OHLCV, and the screener — the BOJ/ECB inputs and breadth columns for
+later factors are one call away.
