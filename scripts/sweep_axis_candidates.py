@@ -51,6 +51,15 @@ FRED = {
     "TOTALSA": "Vehicle sales (m)", "DGORDER": "Durable goods orders (m)",
     # liquidity
     "FEDFUNDS": "Effective fed funds (m)", "DFF": "Effective fed funds (d)",
+    # Regional Fed surveys -- free stand-ins for the paywalled ISM series.
+    # They print BEFORE ISM each month (Empire ~15th, Philly 3rd Thursday).
+    "PPCDFSA066MSFRBPHI": "Philly Fed prices paid (m, 1968->)",
+    "GACDFSA066MSFRBPHI": "Philly Fed general activity (m, 1968->)",
+    "GAFDFSA066MSFRBPHI": "Philly Fed future activity (m, 1968->)",
+    "PPCDISA066MSFRBNY": "Empire prices paid (m, 2001->)",
+    "GACDISA066MSFRBNY": "Empire general conditions (m, 2001->)",
+    "NOCDISA066MSFRBNY": "Empire new orders (m, 2001->)",
+    "BACTSAMFRBDAL": "Dallas Fed business activity (m, 2004->)",
 }
 
 CANDIDATES: dict[str, list[tuple]] = {
@@ -79,6 +88,12 @@ CANDIDATES: dict[str, list[tuple]] = {
         ("USCI 30d %", "USCI", "pct"),
         ("Baltic Dry 4w %", "BDI", "pct@4"),
         ("Baltic Dry 13w %", "BDI", "pct@13"),
+        ("Philly prices paid (level)", "PPCDFSA066MSFRBPHI", "level"),
+        ("Philly prices paid 3m chg", "PPCDFSA066MSFRBPHI", "diff@3"),
+        ("Philly prices paid m/m", "PPCDFSA066MSFRBPHI", "mom_diff"),
+        ("Empire prices paid (level)", "PPCDISA066MSFRBNY", "level"),
+        ("Empire prices paid 3m chg", "PPCDISA066MSFRBNY", "diff@3"),
+        ("Empire prices paid m/m", "PPCDISA066MSFRBNY", "mom_diff"),
     ],
     "growth": [
         ("ISM mfg PMI (level)", "ISM_MFG_PMI", "level"),
@@ -87,6 +102,14 @@ CANDIDATES: dict[str, list[tuple]] = {
         ("ISM svc activity (level)", "ISM_SVC_ACTIVITY", "level"),
         ("ISM svc activity 3m chg", "ISM_SVC_ACTIVITY", "diff@3"),
         ("Baltic Dry 13w %", "BDI", "pct@13"),
+        ("Philly activity (level)", "GACDFSA066MSFRBPHI", "level"),
+        ("Philly activity 3m chg", "GACDFSA066MSFRBPHI", "diff@3"),
+        ("Philly future activity (level)", "GAFDFSA066MSFRBPHI", "level"),
+        ("Empire conditions (level)", "GACDISA066MSFRBNY", "level"),
+        ("Empire conditions 3m chg", "GACDISA066MSFRBNY", "diff@3"),
+        ("Empire new orders (level)", "NOCDISA066MSFRBNY", "level"),
+        ("Dallas activity (level)", "BACTSAMFRBDAL", "level"),
+        ("Dallas activity 3m chg", "BACTSAMFRBDAL", "diff@3"),
         ("Copper 30d %", "COPPER", "pct"), ("XLY/XLP 30d %", ("XLY", "XLP"), "ratio_pct"),
         ("SPY 30d %", "SPY", "pct"), ("KRE/SPY 30d %", ("KRE", "SPY"), "ratio_pct"),
         ("2s10s 30d chg", "T10Y2Y", "diff"), ("10y-3m (level)", ("US10Y", "US03MY"), "spread"),

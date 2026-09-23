@@ -1,7 +1,7 @@
 """
 cgi_watchlists.py -- Print the two TradingView watchlists CGI maintains:
 
-  CGI · now            top of the BACKTEST leaderboard for the current regime
+  CGI · now            best 20 / worst 10 of the BACKTEST leaderboard, current regime
   CGI · if next flips  same for the regime we land in if the next release
                        flips its axis
 
@@ -33,7 +33,8 @@ import backtest_data as bd  # noqa: E402
 import markov_data as md  # noqa: E402
 import release_calendar as cal  # noqa: E402
 
-TOP = int(os.environ.get("TOP", "15"))
+TOP = int(os.environ.get("TOP", "20"))
+BOTTOM = int(os.environ.get("BOTTOM", "10"))
 MIN_OCC = int(os.environ.get("MIN_OCC", "5"))
 
 # CGI ticker -> TradingView symbol. Exchanges follow the user's own lists.
@@ -87,15 +88,22 @@ def main() -> None:
         if len(rows) < 5 and min_occ > 3:
             min_occ = 3
             rows = leaderboard(reg["compass"], reg["grid"], min_occ)
-        rows = rows[:TOP]
+        best = rows[:TOP]
+        worst = [r for r in rows[TOP:]][-BOTTOM:] if len(rows) > TOP else []
         label = f"C{reg['compass']}G{reg['grid']}"
+        thin = f" (thin: {min_occ}+ occurrences)" if min_occ < MIN_OCC else ""
         desc = (f"{label} — {note}. BACKTEST leaderboard by edge, min {min_occ} occurrences, "
-                f"refreshed {today} by CGI. " +
-                " · ".join(f"{r['ticker']} {r['edge']:+.2f} ({r['occurrences']})" for r in rows))
+                f"refreshed {today} by CGI. BEST: " +
+                " · ".join(f"{r['ticker']} {r['edge']:+.2f} ({r['occurrences']})" for r in best) +
+                " | WORST: " + " · ".join(f"{r['ticker']} {r['edge']:+.2f} ({r['occurrences']})" for r in worst))
+        keep = lambda rs: [{k: r[k] for k in ("ticker", "group", "occurrences", "hit_rate", "edge", "avg_return_pct")} for r in rs]
         out.append({
             "name": name, "regime": label, "description": desc,
-            "symbols": [f"###{label} · {note.upper()}"] + [tv_symbol(r["ticker"], r["group"]) for r in rows],
-            "rows": [{k: r[k] for k in ("ticker", "group", "occurrences", "hit_rate", "edge", "avg_return_pct")} for r in rows],
+            "symbols": ([f"###{label} · BEST {len(best)} · {note.upper()}{thin}"]
+                        + [tv_symbol(r["ticker"], r["group"]) for r in best]
+                        + [f"###{label} · WORST {len(worst)}"]
+                        + [tv_symbol(r["ticker"], r["group"]) for r in worst]),
+            "best": keep(best), "worst": keep(worst),
         })
     print(json.dumps(out, indent=1))
 
