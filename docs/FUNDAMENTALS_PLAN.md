@@ -66,3 +66,39 @@ matter more than exact dollars.
 - feeds layer 3 of the LIVE brief ("who actually earns it")
 - the morning brief routine consumes this map for context, so fundamentals
   must land before that routine is built
+
+---
+
+## IMPLEMENTED 2026-09-25 — and where it diverged from this spec
+
+Built as `api/fundamentals_data.py` + `api/sec_xbrl.py`, served at
+`/api/fundamentals`, page at `/fundamentals`. See BUILD.md §2.7.
+
+Three deliberate divergences from the plan above:
+
+1. **Source is SEC XBRL, not FMP.** This spec assumed "FMP MCP free tier
+   where it reaches". It does not reach: the free tier gates **per symbol**
+   (AMD and NVDA answered, MU and CRM were denied on the identical call),
+   caps quarterly history at 5 rows, and returns *sequential* QoQ growth
+   rather than YoY. SEC XBRL is free, ungated, covers 10,413 filers, carries
+   35 quarters where FMP gave 5, and needs no key — so Render fetches it live
+   and no vendor sits in the path.
+
+2. **"Return to shareholders" is a share of operating cash flow, not a
+   yield.** SEC filings carry no market cap. Inventing one from another
+   source to express a yield would have made the number look more precise
+   than it is.
+
+3. **No valuation, at all.** Deliberate: this factor answers "is the business
+   capturing the theme", not "is it cheap". A P/E stapled on from elsewhere
+   would turn it into a stock screen.
+
+Still outstanding from this spec:
+
+- **Earnings call transcripts are Ultimate-plan only**, so the who-pays-whom
+  map leans on 10-K disclosure as the plan's fallback already assumed.
+- **Step 4 — surfacing affected upstream/downstream names when a company
+  reports, especially those that have NOT yet reported** — needs an earnings
+  calendar joined to `LINKS`. Not built.
+- The artifact view (pick a company, see who pays it) is not built.
+- The map has 7 seeded links. It grows by hand, which was always the plan.

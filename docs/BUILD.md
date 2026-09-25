@@ -25,7 +25,7 @@ So CGI is built as **layers on different clocks**, slowest first:
 |---|---|---|---|
 | Standing themes | ~1 year | **you**, monthly | LIVE, top |
 | Rotating themes | weeks–months | detected from price | LIVE, table |
-| Who earns it | quarterly | fundamentals *(not built)* | — |
+| Who earns it | quarterly | fundamentals | FUNDAMENTALS |
 | Edge ranking | regime-conditioned | backtest | LIVE strip / BACKTEST |
 | Tactical | days | breadth + your eyes | LIVE strip / TAPE |
 
@@ -297,23 +297,75 @@ an **explicit exit rule**.
 *State: complete and the strongest-tested factor. Individual charts stay your
 job, by design.*
 
-### 2.7 FUNDAMENTALS — not built
-*`FUNDAMENTALS_PLAN.md`.*
+### 2.7 FUNDAMENTALS — built 2026-09-25
+*`api/fundamentals_data.py`, `api/sec_xbrl.py`, `FUNDAMENTALS_PLAN.md`.*
 
-The spec is written and agreed; the code is not. Your framing: Damodaran's
-five, **all as rate of change** — revenue growth, margin growth, return to
-shareholders, interest rate risk, risk of ruin — plus the thing his framework
-lacks, **inter-company context: the who-pays-whom map.**
+Damodaran's five, **all as rate of change**, plus the who-pays-whom map. The
+read throughout is the **second derivative**: a company going from +30% to
++20% revenue growth is decelerating while still growing fast, and that is
+what separates "the theme is working" from "this company is capturing it".
 
-This is the layer that answers "who actually earns it" inside a theme, which
-is the gap the AI capex thesis names explicitly: the applications layer is
-where a fundamentals model is needed to tell real revenue from a press
-release.
+**Source is the SEC, not a vendor.** The alternatives were mapped and both
+failed:
 
-Known constraint: FMP's free tier blocks `news` and `economics`; `statements`
-and `analyst` are untested.
+- **FMP free gates per symbol.** AMD and NVDA answered; MU and CRM were
+  `ACCESS DENIED` on the identical call. It also caps quarterly history at 5
+  rows and returns *sequential* quarter-on-quarter growth, which is
+  seasonally contaminated — AMD's Q1 always looks flat against a big Q4 and
+  would print as "decelerating" every year. ETF holdings and transcripts need
+  the Ultimate plan.
+- **TradingView has no server-side API**, only the MCP, so it would need a
+  scheduled routine — and its scanner host returned 429 on every endpoint
+  during this build while the ECONOMICS group is already broken. Two factors
+  would have shared one point of failure.
+- **SEC XBRL** is free, needs no key, gates nothing, covers all 10,413
+  filers, carries full history (MU has 35 quarters against FMP's 5), gives
+  *true* year-on-year with no chaining, and is the filed number itself.
 
-*State: specified, not started. This is tomorrow's work.*
+Render needs only a User-Agent header, so the endpoint fetches live. That
+removed the "no FMP key on Render" constraint the first draft was built
+around. **64 of 65 filers resolve in 7.6 seconds** (only X is missing).
+
+Constituents hang off `themes_data.THEMES` keys and are asserted against
+them, so a theme renamed there fails loudly instead of silently emptying the
+table. They are hand-seeded anchors, not fund weightings, because ETF
+holdings are paywalled.
+
+Two correctness details worth keeping:
+
+- **Q4 is derived** from the annual figure where a filer never tagged it as a
+  90-day period. That recovered 5 of MU's 35 quarters; without it a quarter
+  of the history silently disappears.
+- **An accumulated deficit drags Altman Z'' negative regardless of
+  solvency.** SNOW scored −4.7 while holding net cash; ABBV −0.01 on $12.8bn
+  of FCF. The band is withheld and the reason reported, rather than printing
+  "distress" about a company that is fine.
+
+#### What it found immediately
+
+- **The AI layer cake is not moving together** — which the thesis predicted.
+  Median revenue acceleration: chips **+46.1pp**, applications +3.3pp,
+  infrastructure +2.3pp, energy **−0.4pp**. Infrastructure slowing and
+  utilities falling are confirmed (CEG −10.3pp, NRG −9.7pp, VRT −6.0pp,
+  SMCI −29.5pp).
+- **But chips contradict the thesis.** The standing note says AMD is working
+  while NVDA decelerates. The filings say the opposite: **NVDA +46.1pp
+  against AMD's +12.3pp.** Chips are not splitting — they are the strongest
+  layer in the cake.
+- **Applications are buying their growth.** Four of six read "buying growth"
+  — revenue accelerating, margin not expanding (NOW −6.80pp, PANW −5.66pp).
+  PLTR is the only one capturing. That is precisely the real-revenue-versus-
+  press-release question, answered.
+- **MU is the strongest fundamental in the universe**: +345.7% YoY,
+  acceleration +149.4pp, margin +46.85pp, on a sustained ramp (+36.6, +46.0,
+  +56.7, +196.3, +345.7) rather than a spike. It confirms Korea/DRAM.
+- **Copper's price and its fundamentals disagree.** FCX is rolling over
+  (−8.1% YoY, −20.3pp) while COPX/CPER ran on RS. A theme can run on price
+  while the companies inside it deteriorate — which is the reason this factor
+  exists.
+
+*State: built and live. The who-pays-whom map is seeded with 7 links and is
+the half that grows by hand.*
 
 ---
 
@@ -336,7 +388,7 @@ FastAPI on Render  (cgi-api-9mim.onrender.com)   bearer token
         v
 Next.js on Vercel  (cgi-vercel.vercel.app)   same-origin proxy routes
         |
-  LIVE ◉ · TAPE ≡ · BACKTEST ⊞ · MACRO ◎ · MARKOV ⇄ · POSITIONING ⚖ · NOTES ✎
+  LIVE ◉ · TAPE ≡ · BACKTEST ⊞ · MACRO ◎ · MARKOV ⇄ · POSITIONING ⚖ · FUNDAMENTALS ⊟ · NOTES ✎
 ```
 
 ### Endpoints
@@ -344,7 +396,7 @@ Next.js on Vercel  (cgi-vercel.vercel.app)   same-origin proxy routes
 `/api/live` `/api/macro/{rates,growth,dot-plot}`
 `/api/backtest/{compass}/{grid}` (+ `/occurrences`) `/api/signals` `/api/markov`
 `/api/cot` `/api/policy-watch` `/api/notes` `/api/technicals` `/api/themes`
-`/api/series` (GET/POST) `/api/watchlists`
+`/api/series` (GET/POST) `/api/fundamentals` `/api/watchlists`
 
 ### The cache, and the trap in it
 
@@ -438,7 +490,6 @@ Kept as a list because it is the most useful section in a year's time.
   went the right way at some point in nearly every window, and holding to the
   regime's end gave most of it back. The edge is in the range, not the
   trend.**
-- **Fundamentals does not exist.** §2.7.
 - **Industry-level RS needs constituent mapping.** Your own list is two years
   stale and does not separate the oil names by midstream/downstream. A
   TradingView screener is the proposed route.
@@ -498,6 +549,8 @@ Files that carry real decisions, in the order they matter:
 | `api/themes_data.py` | RS detector, survival curve, the three standing themes |
 | `api/technicals_data.py` | breadth glance, built to your reading order |
 | `api/cot_data.py` | contracts, name stitching, the two index bases |
+| `api/fundamentals_data.py` | the five as rate of change, theme constituents, who-pays-whom |
+| `api/sec_xbrl.py` | SEC concept fallbacks, Q4 derivation, true YoY |
 | `api/notes_data.py` | POLICY / NARRATIVE / FINDINGS registers |
 | `api/cache.py` | TTLs and the version-bump discipline |
 | `scripts/fix_splits.py` | the two-pass repair, and why it is two passes |
@@ -508,6 +561,6 @@ Files that carry real decisions, in the order they matter:
 
 ---
 
-*Seven factors: six built, one specified. The regime model is the skeleton,
+*Seven factors, all seven built. The regime model is the skeleton,
 themes are the muscle, and the layering is the point — it exists so that a
 position survives contact with the next morning's data.*
