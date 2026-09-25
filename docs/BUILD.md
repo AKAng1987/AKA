@@ -498,6 +498,71 @@ LIVE load in §7 — caught this time before it stuck.
 
 ---
 
+## 4b. Added 2026-09-25/26 — the brief, delivery, and global liquidity
+
+**The morning brief runs on AWS, not on Claude.** EventBridge → Lambda → SNS
+email, 07:00 PHT Mon–Fri plus Sunday. It sends **only when something is
+push-worthy**, not merely when something changed: on the day it shipped there
+were 7 changes and 0 push-worthy (all standing COT extremes), and gating on
+"anything changed" would have emailed every morning about the same pinned ag
+contracts. If the CGI project is never opened again, the brief keeps arriving.
+
+**Importance is a diff against rules already written down**, ranked by measured
+firing rates — compass flip 2.5/yr, grid flip 8.9/yr, breadth 8/20 cross
+21.6/yr, breadth colour 32.1/yr. Nothing is promoted because it feels
+significant. "What crossed" lives at the bottom of LIVE; the separate `/brief`
+page was **deleted** once it turned out to duplicate LIVE.
+
+**FUNDAMENTALS coverage 118/129 → 130/133.** Four causes, four fixes: the bank
+concept `InterestAndDividendIncomeOperating` (HWC, ONB), the `ifrs-full`
+namespace (AEM), annual mode for 20-F/40-F filers (20 names including MUFG,
+RIO, BABA), and a self-healing fall-through for OTC lines that are not SEC
+filers. Annual filers are **excluded from quarterly acceleration medians** and
+reported separately — mixing the two quantities would corrupt every rollup
+they touch.
+
+**Seasonal sequential growth ships descriptive, not as a signal.** YoY cannot
+see a one-quarter inflection: MU turned on 2025-05-29 while its acceleration
+read −1.7pp, "decelerating". But the turn detector was backtested before being
+allowed to notify and it **failed** — 0.91–1.03× lift over 4,949
+company-quarters against a 50.5% base rate. MU was one anecdote.
+
+**Global liquidity (§Howell), as a labelled proxy.** Eight FRED series
+onboarded and backfilled (9,978 rows): US net liquidity $5,770bn, reserves
+$2,930bn, Fed+ECB+BOJ $17,574bn (−$897bn YoY), SOFR−IORB −2.0bp. CGI's
+LIQUIDITY axis is the *price* of money; this is the *quantity*.
+
+**Who-pays-whom from 10-Ks found its own limit.** The 10%-customer disclosure
+reliably gives the **percentage** and essentially never the **name** — zero
+named counterparties across the first six companies. NVDA discloses a 22% and
+a 14% customer without naming either. So the map stays hand-built; what this
+adds is revenue concentration.
+
+**Load times roughly halved**: LIVE 10.8/9.1s → 4.9s, after memoising the
+6.1MB backtest blob by ETag (2.13s → 0.06s) and the nightly workbook
+(2.7–12.0s → 1.0s), and removing LIVE's second round trip via
+`/api/backtest/current`.
+
+**Ask CGI** is a saved prompt (`docs/ASK_CGI.md`), not an endpoint — the site
+is public and an LLM endpoint on it would be billable by anyone who found it.
+
+### Bugs caught in this stretch, all of the same family
+
+Every one was a *silently wrong* answer that looked right:
+
+- `cgi_changes` read `markov["events"]`, a key that does not exist. **Regime
+  flips — the rarest and most important event CGI has — would never have
+  fired.**
+- The monthly review fetched `vercel.app/api/themes`, which **404'd**. Fixed by
+  adding public read-only proxies.
+- Namespace selection returned early on any `us-gaap` hit, so AEM's tag that
+  died in 2010 beat its live IFRS one — the *same* "take the first thing you
+  find" mistake as the NVDA bug.
+- ETF name matching: `" CO"` turned `AMAZON COM INC` into `AMAZONM`, zeroing
+  every First Trust fund; `"COMMON STOCK"` zeroed every Global X fund; and a
+  loose regex invented a counterparty for TWLO out of "the Company".
+- JPNASSETS units put the BOJ's balance sheet at **$4.1bn instead of $4.1tn**.
+
 ## 5. What is not known
 
 Kept as a list because it is the most useful section in a year's time.
