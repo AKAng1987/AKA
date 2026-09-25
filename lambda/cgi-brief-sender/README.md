@@ -40,9 +40,15 @@ which is intended — it should never fail silently.
 
 ## Behaviour
 
-- Sends **only when something crossed.** A quiet morning sends nothing at all;
-  a daily "nothing to report" email trains you to filter the thing you wanted
-  to read. `ALWAYS_SEND=1` overrides this for testing.
+- Sends **only when something is push-worthy** — not merely when something
+  changed. The difference is not academic: on the day this shipped the brief
+  had **7 changes and 0 push-worthy**, all standing COT extremes that had been
+  extreme for weeks. Gating on "anything changed" sent an email immediately on
+  the first live test, and would have sent one every morning about the same
+  pinned ag contracts. `ALWAYS_SEND=1` overrides for testing.
+- What counts as push-worthy is set in `cgi_changes.RATES`, from rates
+  measured against CGI's own history: a compass flip fires 2.5 times a year, a
+  breadth colour change 32.1 times, so one is in and the other is not.
 - Subject is `CGI daily: N to act on` when anything is push-worthy, else
   `CGI daily: N crossed`.
 - Body leads with what is worth attention, then what else crossed, then where

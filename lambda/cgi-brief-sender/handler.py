@@ -8,13 +8,22 @@ a new project." So the schedule lives in EventBridge, the send lives here, and
 the only thing Claude did was write it.
 
 WHAT IT SENDS
-Only what crossed. /api/brief already decides that -- every event there is a
-rule that existed in CGI before today, ranked by how rarely it actually fires.
-If nothing crossed, this sends NOTHING at all: a silent morning is the correct
-output, and a daily "nothing to report" email trains you to filter the thing
-you wanted to read.
+Only when something is WORTH ACTING ON -- i.e. when /api/brief returns at
+least one push-worthy change. Everything else waits for the page.
 
-Set ALWAYS_SEND=1 to override that while testing.
+The gate is push, not changes, and the difference is not academic: on the day
+this shipped the brief had 7 changes and 0 push-worthy, all of them standing
+COT extremes that had been extreme for weeks. Gating on "anything changed"
+would have sent an email every single morning about the same pinned ag
+contracts, which is exactly the notification fatigue this is meant to avoid.
+The user's own instruction was "silent if nothing and not major changes".
+
+What counts as major is not decided here. cgi_changes.RATES marks a kind
+push-worthy, and each rate there was measured from CGI's own history: a
+compass flip fires 2.5 times a year, a breadth colour change 32.1 times, so
+one is in and the other is not.
+
+Set ALWAYS_SEND=1 to override while testing.
 """
 from __future__ import annotations
 
@@ -99,10 +108,14 @@ def lambda_handler(event, context):
     brief = _fetch(cadence)
 
     changes = brief.get("changes") or []
-    if not changes and not ALWAYS_SEND:
-        return {"sent": False, "reason": "nothing crossed", "cadence": cadence}
+    push = brief.get("push") or []
+    if not push and not ALWAYS_SEND:
+        return {"sent": False, "cadence": cadence,
+                "reason": ("nothing crossed" if not changes
+                           else f"{len(changes)} crossed but none push-worthy"),
+                "changes": len(changes)}
 
     subject, body = _render(brief)
     sns.publish(TopicArn=TOPIC_ARN, Subject=subject, Message=body)
     return {"sent": True, "cadence": cadence,
-            "changes": len(changes), "push": len(brief.get("push") or [])}
+            "changes": len(changes), "push": len(push)}
