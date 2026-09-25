@@ -324,7 +324,8 @@ failed:
 
 Render needs only a User-Agent header, so the endpoint fetches live. That
 removed the "no FMP key on Render" constraint the first draft was built
-around. **64 of 65 filers resolve in 7.6 seconds** (only X is missing).
+around. **63 of 65 filers resolve in ~15 seconds** (X is acquired; AEM files
+IFRS, not us-gaap, and is excluded rather than shown stale).
 
 Constituents hang off `themes_data.THEMES` keys and are asserted against
 them, so a theme renamed there fails loudly instead of silently emptying the
@@ -344,14 +345,15 @@ Two correctness details worth keeping:
 #### What it found immediately
 
 - **The AI layer cake is not moving together** — which the thesis predicted.
-  Median revenue acceleration: chips **+46.1pp**, applications +3.3pp,
+  Median revenue acceleration: chips **+37.6pp**, applications +3.3pp,
   infrastructure +2.3pp, energy **−0.4pp**. Infrastructure slowing and
   utilities falling are confirmed (CEG −10.3pp, NRG −9.7pp, VRT −6.0pp,
   SMCI −29.5pp).
 - **But chips contradict the thesis.** The standing note says AMD is working
-  while NVDA decelerates. The filings say the opposite: **NVDA +46.1pp
-  against AMD's +12.3pp.** Chips are not splitting — they are the strongest
-  layer in the cake.
+  while NVDA decelerates. The filings say the opposite: **NVDA +20.6pp
+  against AMD's +12.3pp**, with MU +149.4pp and AVGO +37.6pp ahead of both.
+  Chips are not splitting — they are the strongest layer in the cake, and AMD
+  is its weakest member.
 - **Applications are buying their growth.** Four of six read "buying growth"
   — revenue accelerating, margin not expanding (NOW −6.80pp, PANW −5.66pp).
   PLTR is the only one capturing. That is precisely the real-revenue-versus-
@@ -467,6 +469,32 @@ Two repair lessons in `scripts/fix_splits.py` worth keeping:
    2024-01-24 4.19 split applied by hand via `FORCED_SPLITS`.
 
 Verified zero remaining anomalies after the repair.
+
+### The fundamentals build added two more, 2026-09-25
+
+**A dead XBRL concept reads exactly like a live one.** Filers switch concepts
+mid-history. NVDA used `RevenueFromContractWithCustomerExcludingAssessedTax`
+until 2022 and then moved to `Revenues`; taking the first tag present read a
+series that had been dead four years and reported **FY2020's $3.1bn as the
+latest quarter**, with a confident and wrong verdict attached. **48 of 65
+names merge more than one tag**, so most of the first run was affected, and
+the first numbers written into this document were wrong.
+
+Fixed three ways: merge the whole fallback chain rather than choosing one tag;
+add `RevenuesNetOfInterestExpense` for banks (JPM's plain `Revenues` stops in
+2025, WFC's in 2020); and add a **`STALE_DAYS = 200` guard** that refuses any
+series whose newest quarter predates a reporting cycle. The guard is the part
+that matters — it turns this whole bug class from a silent wrong answer into a
+visible gap, which is how AEM surfaced as an IFRS filer instead of pretending
+to be current.
+
+**Memory, not rate limit, is the ceiling on SEC fetches.** A `companyfacts`
+payload decompresses to 3–8MB and carries 350–780 tags; the universe is
+~314MB, several times that again parsed into Python. Eight workers ran fine
+locally and would not have survived Render's instance. Each payload is now
+trimmed to the ~20 tags in use *inside* the worker and released immediately,
+with workers cut to 3: peak RSS 145MB. Same mistake class as the 33-second
+LIVE load in §7 — caught this time before it stuck.
 
 ---
 
