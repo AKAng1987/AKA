@@ -96,10 +96,12 @@ def _render(b: dict) -> tuple[str, str]:
         L += ["", f"Degraded sections: {', '.join(b['unavailable'])}. "
                   "The rest of the brief is unaffected."]
 
+    # Links to LIVE, not /brief: that page was deleted once it turned out to
+    # duplicate LIVE, and "what crossed" now sits at the bottom of LIVE itself.
     L += ["", "-" * 60,
           "Importance is a diff against rules already written down, ranked by",
           "how rarely each one fires -- not a judgement made each morning.",
-          "", f"{API_URL.replace('cgi-api-9mim.onrender.com', 'cgi-vercel.vercel.app')}/brief"]
+          "", "https://cgi-vercel.vercel.app/"]
     return subject, "\n".join(L)
 
 
