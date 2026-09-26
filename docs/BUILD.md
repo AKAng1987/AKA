@@ -679,7 +679,8 @@ returned a permission error, which is the path every foreign series needs.
 unaffected, but anything else rendering that group renders nothing. It should
 not be deleted — those are exactly the names the foreign curve work will fill.
 
-**The refresher Lambda's ticker universe is 38 tickers behind.**
+**The refresher Lambda's ticker universe was 38 tickers behind.** (Fixed the
+same day; see 4e.)
 `lambda/backtest_refresher/handler.py` **duplicates** `HUD_GROUPS` with the
 comment "Keep in sync manually if HUD_GROUPS ever changes there", and it has
 drifted: `BACKTEST_UNIVERSE` declares 167 tickers, the blob contains 129, and
@@ -687,6 +688,61 @@ the difference is exactly EWQ, 6 commodity ETFs and 31 sector ETFs. These are
 silently not backtested. EWQ is not a data problem — it has 5,318 rows back to
 2005-07-25, more history than EPHE. The fix is not to re-sync the copy once,
 since it already drifted silently; the shared list needs one home.
+
+## 4e. Added 2026-09-26 — one source of truth for the ticker universe
+
+The refresher Lambda bundled its own copy of `HUD_GROUPS` with the comment
+"Keep in sync manually if HUD_GROUPS ever changes there". It drifted. The API
+declared 167 tickers, the Lambda produced 129, and the 38-ticker difference —
+EWQ plus 31 sector and 6 commodity ETFs — had **no regime stats at all, in any
+regime**. They were in the dashboard's own universe and simply never
+backtested. EWQ was not a data gap: 5,318 rows back to 2005-07-25, more history
+than EPHE.
+
+### The universe is now fetched, not bundled
+
+`GET /api/universe` (public, unauthenticated, same reasoning as
+`/api/watchlists` — a ticker list is not sensitive) serves the universe and its
+group map from the one authoritative `HUD_GROUPS`. The Lambda reads it at
+invocation time.
+
+**Why not one shared file both deploys read**, which was the other option:
+`cgi-vercel` and `market-dashboard` are separate repos with deliberately
+separate deployment artifacts, so "shared" would mean a cross-repo copy step at
+build time — another sync mechanism that can drift silently, which is precisely
+the defect being fixed. Fetching has one source of truth and no manual step.
+No custom layer either: `urllib` is standard library.
+
+### The fallback, and why it does not reintroduce the bug
+
+The bundled list is **kept as a fallback**, because this Lambda exists
+precisely because Render's request path is unreliable (the documented ~75s
+TCP-connect delay), and a hard dependency would let a Render outage kill the
+nightly refresh outright.
+
+But a fallback can go stale silently, which is the original defect wearing a
+different hat. Three things prevent that:
+
+1. `_resolve_universe()` **rejects an implausible payload** — missing group
+   entries, or a universe under 80% of the bundled size. A bad upstream deploy
+   silently shrinking the blob is the same class of failure as the drift.
+2. The blob records **`universe_source`** (`"api"` or `"fallback: <why>"`) and
+   `universe_count`, so the fallback is visible in the data, not only in a
+   CloudWatch log nobody reads.
+3. `backtest_data.universe_drift()` compares the blob's tickers against the
+   live universe on **every read**, in both directions, and the BACKTEST page
+   shows a banner naming the missing tickers and stating plainly that they have
+   no stats. The original failure was that they looked *absent* rather than
+   *broken*.
+
+The bundled fallback was also regenerated from the authoritative source, so it
+is correct today: 167 tickers, same order, same group map.
+
+### Left alone deliberately
+
+`FOREIGN RATES` stays in `HUD_GROUPS` with all 12 symbols absent from
+`price-history`. It is an empty placeholder in `BACKTEST_EXCLUDE_GROUPS`, and
+those are exactly the names the foreign curve work will fill.
 
 ## 5. What is not known
 

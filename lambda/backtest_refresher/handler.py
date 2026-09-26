@@ -3,7 +3,7 @@ cmon-stage-backend-backtest-refresher
 
 Phase 3 (see ~/cgi-vercel/PHASE3_LAMBDA_REWRITE.md for full rationale).
 Daily job: recompute BACKTEST tab stats for every ticker in
-BACKTEST_UNIVERSE against every (grid_q, compass_q) regime combo, and
+the backtest universe against every (grid_q, compass_q) regime combo, and
 write one S3 blob Render's read path serves from.
 
 Replaces the Render-hosted chunked-refresh design (cgi-vercel/api/
@@ -16,13 +16,37 @@ compute-speed one. Moving refresh compute in-region next to DynamoDB
 
 Core compute (build_regime_periods, get_occurrences, compute_stats,
 the two fetch functions) is a direct, unchanged port of
-cgi-vercel/api/backtest_data.py's equivalents. HUD_GROUPS is
-duplicated here rather than imported from cgi-vercel/api/
-dashboard_data.py -- matches this project's existing pattern of each
-Lambda bundling its own copy of shared logic independently (see the
-external_api/ landmine noted 2026-09-08: these Lambdas don't share one
-deployment artifact) and keeps this Lambda's only dependency on the
-default runtime's bundled boto3, no custom layer.
+cgi-vercel/api/backtest_data.py's equivalents.
+
+THE TICKER UNIVERSE IS FETCHED, NOT BUNDLED (changed 2026-09-26)
+----------------------------------------------------------------
+This Lambda used to bundle its own copy of HUD_GROUPS with a comment
+saying "keep in sync manually if HUD_GROUPS ever changes there". It
+drifted: the API declared 167 tickers, this copy produced 129, and the
+38-ticker difference -- EWQ plus 31 sector and 6 commodity ETFs -- was
+silently never backtested. Those tickers appeared in the dashboard's
+own universe and had no regime stats at all. EWQ was not a data gap; it
+has 5,318 rows of price history back to 2005, more than EPHE.
+
+So the universe now comes from GET /api/universe, which derives it from
+the one authoritative HUD_GROUPS. The alternative -- one shared file
+both deploys read -- was rejected because cgi-vercel and market-dashboard
+are separate repos with deliberately separate deployment artifacts (see
+the external_api/ landmine noted 2026-09-08), so "shared" would mean a
+cross-repo copy step at build time: another sync mechanism that can
+drift silently, which is the defect being fixed.
+
+The bundled list is KEPT as a fallback, because this Lambda exists
+precisely because Render's request path is unreliable (the ~75s TCP
+delay below), and a hard dependency on it would let a Render outage kill
+the nightly refresh entirely. A fallback, though, can itself go stale
+silently -- which is the original defect wearing a different hat. So the
+blob records which source was used, and cgi-vercel's
+backtest_data.universe_drift() compares the blob's tickers against the
+live universe on EVERY read and surfaces the difference. Drift is now
+loud wherever it comes from.
+
+Still no custom layer: urllib is in the standard library.
 
 Full-universe, single-shot, no chunking: a Lambda in this region has
 no per-request timing ceiling to chunk around. Storage simplifies to
@@ -68,57 +92,79 @@ _logger.setLevel(logging.INFO)
 _ddb = boto3.client("dynamodb", region_name=REGION)
 _s3 = boto3.client("s3", region_name=REGION)
 
-# Duplicated from cgi-vercel/api/dashboard_data.py's HUD_GROUPS (this
-# project's Lambdas each bundle their own copy of shared reference
-# data rather than sharing a deployment artifact -- see module
-# docstring). Keep in sync manually if HUD_GROUPS ever changes there.
+# FALLBACK ONLY. The live universe comes from UNIVERSE_URL; this copy is used
+# only when that fetch fails, so that a Render outage degrades the refresh to
+# "last known universe" instead of killing it. It does NOT need manual syncing
+# to stay correct -- if it goes stale, universe_drift() on the read side says
+# so, loudly, along with universe_source telling you the fallback was used.
 HUD_GROUPS: "OrderedDict[str, tuple]" = OrderedDict([
-    ("US EQUITIES", (["DJI", "SPX", "IXIC", "RUT", "VIX"], "SPX")),
-    ("INDEX ETF", (["DIA", "SPY", "QQQ", "IWM"], "SPX")),
+    ("US EQUITIES", (["DJI", "SPX", "IXIC", "RUT", "VIX"], 'SPX')),
+    ("INDEX ETF", (["DIA", "SPY", "QQQ", "IWM"], 'SPX')),
     ("SECTOR ETF", (
-        ["XLB", "XLI", "XLY", "XLC", "XLK", "XME", "XLRE", "XLP", "XLU",
-         "XLE", "XOP", "XHB", "PBS", "PBJ", "PEJ", "TAN", "ICLN",
-         "XLF", "KBE", "KRE", "KIE", "IAI", "XLV", "XHE",
-         "IYT", "JETS", "BLOK", "SOCL", "SOXX", "ROBO", "SKYY",
-         "FDN", "HACK", "CIBR", "KWEB", "MJ",
-         "ARKK", "ARKG", "ARKW", "ARKF", "ARKQ", "IZRL"],
-        "SPX",
+        [
+            "XLB", "XLI", "XLY", "XLC", "XLK", "XME", "XLRE", "XLP", "XLU",
+            "XLE", "XOP", "XHB", "PBS", "PBJ", "PEJ", "TAN", "ICLN", "XLF",
+            "KBE", "KRE", "KIE", "IAI", "XLV", "XHE", "IYT", "JETS", "BLOK",
+            "SOCL", "SOXX", "ROBO", "SKYY", "FDN", "HACK", "CIBR", "KWEB", "MJ",
+            "ARKK", "ARKG", "ARKW", "ARKF", "ARKQ", "IZRL", "SMH", "MAGS",
+            "AIQ", "WCLD", "IBB", "IHI", "IHE", "IYH", "CNCR", "ITA", "XAR",
+            "VNQ", "MORT", "XRT", "IBUY", "KCE", "KBWP", "PSP", "ESPO", "BJK",
+            "VICE", "IDRV", "KARS", "BATT", "GRID", "FAN", "PBD", "NLR", "EVX",
+            "SEA", "IGF"
+        ],
+        'SPX',
     )),
-    ("US INTEREST RATES", (["US03MY", "US01Y", "US02Y", "US05Y", "US10Y", "US20Y", "US30Y", "MOVE"], None)),
-    ("BONDS ETF", (["SHY", "IEF", "TLT", "TMF"], "SPX")),
+    ("US INTEREST RATES", (
+        [
+            "US03MY", "US01Y", "US02Y", "US05Y", "US10Y", "US20Y", "US30Y",
+            "MOVE"
+        ],
+        None,
+    )),
+    ("BONDS ETF", (["SHY", "IEF", "TLT", "TMF"], 'SPX')),
     ("SPREADS", (["T10Y2Y", "T10Y3M"], None)),
     ("RATES", (["DFEDTARU", "FEDFUNDS", "CPIAUCSL", "GDP", "DRTSCILM"], None)),
     ("COMMODITIES METALS", (
-        ["DBC", "USO", "UNG", "GLD", "GDX", "GDXJ", "SLV", "SIL",
-         "JJC", "CPER", "JJN", "WOOD", "SLX", "URA"],
-        "USCI",
+        [
+            "DBC", "USO", "UNG", "GLD", "GDX", "GDXJ", "SLV", "SIL", "JJC",
+            "CPER", "JJN", "WOOD", "SLX", "URA", "COPX", "IEO", "OIH", "FCG",
+            "MLPX", "CRAK"
+        ],
+        'USCI',
     )),
     ("COMMODITIES CONT.", (
-        ["USCI", "USOIL", "NATGAS", "GOLD", "SILVER", "COPPER",
-         "NICKEL", "LITHIUM", "SLX", "WOOD", "URANIUM", "COAL"],
-        "USCI",
+        [
+            "USCI", "USOIL", "NATGAS", "GOLD", "SILVER", "COPPER", "NICKEL",
+            "LITHIUM", "SLX", "WOOD", "URANIUM", "COAL"
+        ],
+        'USCI',
     )),
-    ("AGRICULTURAL", (["DBA", "WEAT", "SOYB", "CORN", "RICE", "CANE", "COTTON"], "DBA")),
+    ("AGRICULTURAL", (["DBA", "WEAT", "SOYB", "CORN", "RICE", "CANE", "COTTON"], 'DBA')),
     ("COUNTRY ETF", (
-        ["KWEB", "FXI", "EWJ", "EWZ", "EWT", "EWG", "EWH", "EWI",
-         "EWW", "EWU", "PIN", "IDX", "VNM", "EWM", "EIDO", "EPHE",
-         "EWY", "EWA", "EWC", "EWS", "EWP", "EWL", "EZA", "INDA"],
-        "SPX",
+        [
+            "EWQ", "KWEB", "FXI", "EWJ", "EWZ", "EWT", "EWG", "EWH", "EWI",
+            "EWW", "EWU", "PIN", "IDX", "VNM", "EWM", "EIDO", "EPHE", "EWY",
+            "EWA", "EWC", "EWS", "EWP", "EWL", "EZA", "INDA"
+        ],
+        'SPX',
     )),
     ("FOREIGN RATES", (
-        ["JP10Y", "CN10Y", "HK10Y", "PH10Y", "EU10Y", "GB10Y",
-         "FR10Y", "DE10Y", "IT10Y", "ES10Y", "SG10Y", "KR10Y"],
+        [
+            "JP10Y", "CN10Y", "HK10Y", "PH10Y", "EU10Y", "GB10Y", "FR10Y",
+            "DE10Y", "IT10Y", "ES10Y", "SG10Y", "KR10Y"
+        ],
         None,
     )),
     ("FX", (
-        ["USDPHP", "USDJPY", "USDCNY", "USDAUD", "USDEUR", "USDGBP",
-         "USDCHF", "USDSGD", "USDKRW", "USDHKD", "USDIDR", "USDINR",
-         "USDRUB", "USDTHB", "USDTRY", "DXY", "UUP"],
-        "DXY",
+        [
+            "USDPHP", "USDJPY", "USDCNY", "USDAUD", "USDEUR", "USDGBP",
+            "USDCHF", "USDSGD", "USDKRW", "USDHKD", "USDIDR", "USDINR",
+            "USDRUB", "USDTHB", "USDTRY", "DXY", "UUP"
+        ],
+        'DXY',
     )),
-    ("CRYPTO", (["BTC", "ETH", "BITO"], "DXY")),
+    ("CRYPTO", (["BTC", "ETH", "BITO"], 'DXY')),
 ])
-
 BACKTEST_EXCLUDE_GROUPS = frozenset({
     "US INTEREST RATES", "SPREADS", "RATES", "FOREIGN RATES"
 })
@@ -143,7 +189,48 @@ def _build_backtest_universe() -> tuple[list[str], dict[str, str]]:
     return universe, ticker_group
 
 
-BACKTEST_UNIVERSE, TICKER_GROUP_MAP = _build_backtest_universe()
+_FALLBACK_UNIVERSE, _FALLBACK_GROUP_MAP = _build_backtest_universe()
+
+# The authoritative universe. Public and unauthenticated by design (a ticker
+# list is not sensitive), same as /api/watchlists.
+UNIVERSE_URL = "https://cgi-api-9mim.onrender.com/api/universe"
+
+# Render free-tier instances sleep and pay a documented ~75s TCP-connect delay
+# on wake, so this timeout is generous on purpose: the cost of waiting is one
+# slow run, the cost of timing out too early is a silently stale universe.
+UNIVERSE_TIMEOUT_S = 120
+
+
+def _resolve_universe() -> tuple[list[str], dict[str, str], str]:
+    """(tickers, group_map, source). Never raises: a failure here must degrade
+    to the bundled list rather than abort the nightly refresh."""
+    try:
+        import urllib.request
+        with urllib.request.urlopen(UNIVERSE_URL, timeout=UNIVERSE_TIMEOUT_S) as r:
+            payload = json.loads(r.read().decode("utf-8"))
+        tickers = payload["tickers"]
+        groups = payload["groups"]
+        if not isinstance(tickers, list) or not tickers:
+            raise ValueError("universe payload has no tickers")
+        missing_groups = [t for t in tickers if t not in groups]
+        if missing_groups:
+            raise ValueError(f"universe payload missing groups for {missing_groups[:5]}")
+        # A universe far smaller than the bundled one means something is wrong
+        # upstream; refusing it keeps a bad deploy from silently shrinking the
+        # blob, which is the same class of failure as the drift itself.
+        if len(tickers) < len(_FALLBACK_UNIVERSE) * 0.8:
+            raise ValueError(
+                f"universe shrank implausibly: {len(tickers)} vs bundled {len(_FALLBACK_UNIVERSE)}"
+            )
+        _logger.info("universe fetched from %s: %d tickers", UNIVERSE_URL, len(tickers))
+        return tickers, groups, "api"
+    except Exception as exc:  # noqa: BLE001 -- must never abort the refresh
+        _logger.error(
+            "universe fetch failed (%s), FALLING BACK to the bundled list of %d "
+            "tickers -- this may be stale; check universe_drift on the read side",
+            exc, len(_FALLBACK_UNIVERSE),
+        )
+        return list(_FALLBACK_UNIVERSE), dict(_FALLBACK_GROUP_MAP), f"fallback: {exc}"
 
 
 def _fetch_model_history(model_name: str) -> list[dict]:
@@ -339,14 +426,18 @@ def compute_stats(occurrences: list[dict]) -> Optional[dict]:
     }
 
 
-def _refresh_all(periods: list[dict]) -> tuple[dict, list[str], list[dict]]:
-    """Recompute every BACKTEST_UNIVERSE ticker. Returns
+def _refresh_all(
+    periods: list[dict],
+    universe: list[str],
+    group_map: dict[str, str],
+) -> tuple[dict, list[str], list[dict]]:
+    """Recompute every ticker in `universe`. Returns
     (ticker_data, refreshed, failed)."""
     ticker_data: dict = {}
     refreshed: list[str] = []
     failed: list[dict] = []
 
-    for sym in BACKTEST_UNIVERSE:
+    for sym in universe:
         try:
             prices = _fetch_price_history(sym)
             if not prices:
@@ -361,7 +452,7 @@ def _refresh_all(periods: list[dict]) -> tuple[dict, list[str], list[dict]]:
                         combos[_combo_key(gq, cq)] = occ
 
             ticker_data[sym] = {
-                "group": TICKER_GROUP_MAP[sym],
+                "group": group_map[sym],
                 "combos": combos,
             }
             refreshed.append(sym)
@@ -377,18 +468,24 @@ def lambda_handler(event, context):
     event = event or {}
     dry_run = bool(event.get("dry_run"))
 
-    _logger.info("starting backtest refresh, dry_run=%s, universe=%d tickers", dry_run, len(BACKTEST_UNIVERSE))
+    universe, group_map, universe_source = _resolve_universe()
+    _logger.info("starting backtest refresh, dry_run=%s, universe=%d tickers (source=%s)",
+                 dry_run, len(universe), universe_source)
 
     grid_rows = _fetch_model_history("grid_US")
     compass_rows = _fetch_model_history("compass_US")
     periods = build_regime_periods(grid_rows, compass_rows)
 
-    ticker_data, refreshed, failed = _refresh_all(periods)
+    ticker_data, refreshed, failed = _refresh_all(periods, universe, group_map)
 
     now_iso = datetime.now(timezone.utc).isoformat()
     payload = {
         "schema_version": SCHEMA_VERSION,
         "last_refreshed_at": now_iso,
+        # Which list this run used, so a stale fallback is visible in the blob
+        # itself rather than only in a CloudWatch log nobody reads.
+        "universe_source": universe_source,
+        "universe_count": len(universe),
         "tickers": ticker_data,
     }
 
@@ -397,7 +494,8 @@ def lambda_handler(event, context):
         "last_refreshed_at": now_iso,
         "tickers_refreshed": refreshed,
         "tickers_failed": failed,
-        "tickers_in_universe": len(BACKTEST_UNIVERSE),
+        "tickers_in_universe": len(universe),
+        "universe_source": universe_source,
         "dry_run": dry_run,
     }
 
