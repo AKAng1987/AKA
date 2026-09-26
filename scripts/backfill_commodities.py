@@ -38,6 +38,10 @@ MAX_RETRIES   = 7    # exponential back-off ceiling
 SYMBOLS: dict[str, tuple[str, str, str]] = {
     "USOIL":   ("USOIL.parquet",   "CL=F",  "WTI Crude Oil Futures"),
     "NATGAS":  ("NATGAS.parquet",  "NG=F",  "Natural Gas Futures"),
+    # XAUUSD, not "GOLD": the NYSE ticker GOLD is Barrick Gold Corporation,
+    # and this map's omission of gold is exactly why the equity pipeline
+    # claimed the name. See scripts/backfill_gold_futures.py.
+    "XAUUSD":  ("XAUUSD.parquet",  "GC=F",  "Gold Futures"),
     "SILVER":  ("SILVER.parquet",  "SI=F",  "Silver Futures"),
     "COPPER":  ("COPPER.parquet",  "HG=F",  "Copper Futures"),
     "RICE":    ("RICE.parquet",    "ZR=F",  "Rough Rice Futures"),
