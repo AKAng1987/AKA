@@ -608,6 +608,86 @@ held 1,826 points — and were still empty. The real cause was converting
 was already client-side, which is exactly why every bar rendered and every
 line did not. The theme decision now lives in `PlotlyChart` alone.
 
+## 4d. Added 2026-09-26 — FOREIGN, and two things found by looking
+
+### The regime → country/currency matrix (`/foreign`)
+
+`api/regime_matrix.py`, served at `/api/regime-matrix`, page at `/foreign`.
+It answers "what does this regime mean for each country and each currency"
+for any of the 16 Compass × Grid cells.
+
+**It needed no new data.** The occurrences blob already held 24 country ETFs
+and 17 USD pairs, so this shipped ahead of the foreign yields and policy
+rates that the FOREIGN plan is mostly about. The equity leg and the FX leg sit
+side by side because the country ETF and the USD pair are two expressions of
+one view.
+
+No S3 cache layer: the only input is the occurrences blob, which
+`backtest_data` already memoises in-process by ETag, and the rest is pure
+computation. Warm build is 0.05s, so 16 cache keys would have bought nothing.
+Regime switching is a query string, which keeps the page a server component
+and makes every cell a shareable URL.
+
+Three rules are enforced in the module itself, each of them a scar:
+
+1. **n travels with every cell.** A regime has roughly 8 occurrences in the
+   record, and a hit rate without its sample size is not a fact. This is the
+   same rule the URA median-of-two defect forced onto the fundamentals medians.
+2. **The FX sign is stated in words by the server.** Every pair is quoted
+   USDXXX, so a positive return is dollar strength and local-currency
+   weakness. `_fx_read()` turns the sign into `usd`/`local` labels so no
+   downstream reader ever re-derives it — an inverted FX sign is silent and
+   would flip every country read while looking entirely normal. Hand-checked
+   against raw prices: USDPHP 62.666 → 62.395 across its last C3G3 occurrence
+   is −0.43%, matching the stored return, and reads as peso strength.
+3. **Absent is not zero.** DXJ and EWQ are reported as "not backtested"
+   rather than as blank rows that read as flat.
+
+Exporter vs importer is **hand-set, not measured**, and labelled that way in
+both the API and the page, because it decides the sign of the currency read:
+an importer wants its own currency strong, an exporter wants it weak.
+
+What it says on arrival: in **C1G1** EPHE is 81.2% / +4.61% over n=16 while
+USDPHP is falling — the user's own thesis ("the PH index does well when
+USDPHP is falling") confirmed from the currency side as well as the equity
+side. In the current **C3G3** the same ETF is 12.5% / −1.01% over n=8.
+
+### Correction: ISM was never frozen
+
+The FOREIGN plan opened with "unfreeze ISM", on the reading that the four ISM
+series in `price-history` were 56 days stale. **That was wrong, and it was
+reported to the user as a live broken factor input before it was checked.**
+
+TradingView timestamps economic series at month-**end** (`2026-08-31`); CGI
+stores them at month-**start** (`2026-08-01`). Same month, same value —
+verified 11 of 11 matching across Oct-2025 to Aug-2026. The newest ISM in
+existence is August 2026, because September's does not publish until early
+October. The "56 days" was a monthly series measured from its reference-month
+start, nothing more.
+
+Nothing was written. Had the verification step been skipped, four series would
+have received duplicate rows under wrong dates. What survives: the
+`ECONOMICS:` group **is** reachable via `get_ohlcv` where `get_economic_data`
+returned a permission error, which is the path every foreign series needs.
+
+### Two defects found while building the matrix
+
+**`FOREIGN RATES` is an empty placeholder group.** It declares 12 symbols
+(`JP10Y`, `CN10Y`, `HK10Y`, `PH10Y`, `EU10Y`, `GB10Y`, `FR10Y`, `DE10Y`,
+`IT10Y`, `ES10Y`, `SG10Y`, `KR10Y`) and **all 12 are absent from
+`price-history`**. It is in `BACKTEST_EXCLUDE_GROUPS`, so the backtest is
+unaffected, but anything else rendering that group renders nothing. It should
+not be deleted — those are exactly the names the foreign curve work will fill.
+
+**The refresher Lambda's ticker universe is 38 tickers behind.**
+`lambda/backtest_refresher/handler.py` **duplicates** `HUD_GROUPS` with the
+comment "Keep in sync manually if HUD_GROUPS ever changes there", and it has
+drifted: `BACKTEST_UNIVERSE` declares 167 tickers, the blob contains 129, and
+the difference is exactly EWQ, 6 commodity ETFs and 31 sector ETFs. These are
+silently not backtested. EWQ is not a data problem — it has 5,318 rows back to
+2005-07-25, more history than EPHE. The fix is not to re-sync the copy once,
+since it already drifted silently; the shared list needs one home.
+
 ## 5. What is not known
 
 Kept as a list because it is the most useful section in a year's time.
