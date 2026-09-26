@@ -563,6 +563,51 @@ Every one was a *silently wrong* answer that looked right:
   loose regex invented a counterparty for TWLO out of "the Company".
 - JPNASSETS units put the BOJ's balance sheet at **$4.1bn instead of $4.1tn**.
 
+## 4c. Added 2026-09-26 — cadence, the real universe, and the deep-dive loop
+
+**Each filer is now read at its own cadence.** `cadence()` decides quarterly /
+semiannual / annual from the facts themselves, not from domicile, and the
+staleness bound follows it (200d / 300d / 500d). BHP at 453 days is an annual
+filer between filings, not a dead company, and the old quarterly-shaped bound
+could not express that. Payoff was honestly one name — but the user's own
+sheets are US/PH/JP/HK, so every foreign name added later inherits it.
+
+**A personal position list was added to the universe and then removed.** It
+briefly improved coverage of names actually held, but this repository and
+`/api/fundamentals` are both public, so committing holdings published them.
+Removed from code, API, docs and git history. If per-account coverage is
+wanted again it must come from a gitignored local file that never reaches the
+repo or the endpoint — the lesson being that "useful in the universe" and
+"safe in public source control" are different tests.
+
+**Who-pays-whom is now built by the deep-dive, not by parsing.** The 10-K
+route found **zero named counterparties** across six companies — filers
+disclose the percentage, never the name. The user's reframing: a deep-dive
+that describes a business model has already identified who pays it. So
+`docs/ASK_CGI.md` gained a company deep-dive that opens with CGI's own
+numbers, adds the qualitative half CGI deliberately does not encode, and ends
+with proposed link rows preferring counterparties CGI already covers. Nothing
+enters `LINKS` without confirmation.
+
+### Another median bug, found while verifying
+
+URA reported a median acceleration of **+384.0pp**. The rollup used
+`accel[len//2]`, which on an even sample returns the **upper** of the two
+middle values — with CCJ excluded as an annual filer that left UEC +40.6 and
+UUUU +384.0, and it printed the larger number wearing a median's name. Now
+`statistics.median` (+212.3), and **the sample size travels with every
+median**, because a median of two is not the same claim as a median of twelve.
+
+### And a second MACRO regression, also mine
+
+Six charts rendered nothing. The first fix (explicit height) was necessary but
+insufficient: they then had correct dimensions, all their data — Fed Funds
+held 1,826 points — and were still empty. The real cause was converting
+`LineChart` from a **server** to a client component during the theming work;
+`next/dynamic` with `ssr:false` never loaded in the converted tree. `BarChart`
+was already client-side, which is exactly why every bar rendered and every
+line did not. The theme decision now lives in `PlotlyChart` alone.
+
 ## 5. What is not known
 
 Kept as a list because it is the most useful section in a year's time.
