@@ -34,7 +34,9 @@ from __future__ import annotations
 
 import datetime as dt
 import sys
+import json
 import urllib.request
+from pathlib import Path
 from decimal import Decimal
 
 import boto3
@@ -72,41 +74,60 @@ MIN_Y, MAX_Y = -5.0, 40.0
 MAX_AGE_DAYS = 120
 
 
-# FRED rate-limits the CSV endpoint. Probing ten series in quick succession
-# works; doing it twice in twenty minutes gets every subsequent request timed
-# out. The failure looks identical to a dead series, which is dangerous -- it
-# would have this script record a live series as discontinued. Hence the pause
-# between series and the long backoff.
-PAUSE_BETWEEN_SERIES_S = 6
+# Use the AUTHENTICATED FRED API, not the fredgraph.csv endpoint.
+#
+# The CSV endpoint throttles hard: probing ten series worked, doing it twice
+# within twenty minutes got every subsequent request timed out. That failure is
+# dangerous here because a throttled request looks EXACTLY like a dead series,
+# and an earlier version of this script would have recorded healthy Japanese
+# and Korean yields as discontinued. The keyed API is the supported path and
+# has generous limits.
+FRED_API = "https://api.stlouisfed.org/fred/series/observations"
+PAUSE_BETWEEN_SERIES_S = 1
 
 
-def fetch(fred_id: str, attempts: int = 5) -> list[tuple[str, float]]:
-    """Retry with backoff rather than treating a throttled connection as a
-    missing series. Mistaking a timeout for 'no data' would silently drop a
-    tenor, or worse, mark a healthy series unavailable."""
+def _api_key() -> str:
+    """From the environment, else the Streamlit secrets file the dashboard
+    already uses. Never logged -- it is passed straight into the query."""
+    import os
+    import re as _re
+    k = os.environ.get("FRED_API_KEY", "")
+    if k:
+        return k
+    p = Path.home() / "market-dashboard" / ".streamlit" / "secrets.toml"
+    if p.exists():
+        m = _re.search(r'FRED_API_KEY\s*=\s*"([^"]+)"', p.read_text())
+        if m:
+            return m.group(1)
+    raise SystemExit("FRED_API_KEY not found in env or .streamlit/secrets.toml")
+
+
+def fetch(fred_id: str, attempts: int = 3) -> list[tuple[str, float]]:
+    """Observations for a series. Retries, because a transient failure must not
+    be mistaken for 'no data' -- that is how a live series gets written off."""
     import time
-    url = f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={fred_id}"
-    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+    import urllib.parse
+    q = urllib.parse.urlencode({"series_id": fred_id, "api_key": _api_key(),
+                                "file_type": "json"})
     last: Exception | None = None
     for i in range(attempts):
         try:
-            rows = urllib.request.urlopen(req, timeout=45).read().decode().strip().split("\n")
-            break
+            with urllib.request.urlopen(f"{FRED_API}?{q}", timeout=45) as r:
+                obs = json.load(r).get("observations", [])
+            out = []
+            for o in obs:
+                try:
+                    out.append((o["date"], float(o["value"])))
+                except (ValueError, KeyError):
+                    continue          # "." means no observation that period
+            return out
         except Exception as exc:  # noqa: BLE001
             last = exc
             if i == attempts - 1:
-                raise RuntimeError(f"{fred_id}: {attempts} attempts failed ({exc})") from last
-            time.sleep(5 * (2 ** i))
-    out = []
-    for line in rows[1:]:
-        parts = line.split(",")
-        if len(parts) < 2 or parts[1] in (".", ""):
-            continue
-        try:
-            out.append((parts[0], float(parts[1])))
-        except ValueError:
-            continue
-    return out
+                # Report the series id, never the URL -- the URL carries the key.
+                raise RuntimeError(f"{fred_id}: {attempts} attempts failed ({type(exc).__name__})") from last
+            time.sleep(3 * (2 ** i))
+    return []
 
 
 def main(write: bool) -> None:
