@@ -84,7 +84,7 @@ BLOB_KEY = "Cache/backtest/occurrences.json"
 
 # Bump whenever the occurrence/stat computation logic changes -- Render
 # read-side callers compare this against their own expected version.
-SCHEMA_VERSION = 2  # 2: trend-at-entry fields on each occurrence (BACKTEST v2 step 1)
+SCHEMA_VERSION = 3  # 3: excursion_basis -- close-only fallback where OHLC and close are on different scales
 
 _logger = logging.getLogger("backtest_refresher")
 _logger.setLevel(logging.INFO)
@@ -265,11 +265,26 @@ def _fetch_price_history(symbol: str) -> list[dict]:
                 continue
             high = item.get("high", {}).get("N", close)
             low = item.get("low", {}).get("N", close)
+            c, h, l = float(close), float(high), float(low)
+            # Is this bar's OHLC on the same scale as its close?
+            #
+            # For 44 of 167 tickers it is not. `close` is the ADJUSTED close
+            # while open/high/low are RAW, so the two drift apart with every
+            # split and distribution -- and the further back you go, the
+            # worse it gets. It produced arithmetically impossible output:
+            # RICE showed avg low +9556.91% (a low is the WORST excursion,
+            # it cannot be positive) and MLPX avg high -65.98%.
+            #
+            # low <= close <= high holds for any real bar, so it is a free
+            # test of whether the three can be compared at all. Tolerance is
+            # for rounding, not for disagreement.
+            tol = 1.0 + 1e-6
             rows.append({
                 "date": item["date"]["S"],
-                "close": float(close),
-                "high": float(high),
-                "low": float(low),
+                "close": c,
+                "high": h,
+                "low": l,
+                "ohlc_ok": bool(h > 0 and l > 0 and l <= c * tol and c <= h * tol),
             })
     rows.sort(key=lambda r: r["date"])
     return rows
@@ -382,8 +397,23 @@ def get_occurrences(prices: list[dict], periods: list[dict], grid_q: int, compas
             continue
 
         exit_close = pp[-1]["close"]
-        max_high = max(r["high"] for r in pp)
-        min_low = min(r["low"] for r in pp)
+
+        # Where any bar in the window fails the scale test, fall back to
+        # close-to-close excursions for the WHOLE occurrence. entry_close is
+        # itself one of those closes, so high_pct >= 0 >= low_pct becomes
+        # arithmetically unreachable rather than merely checked afterwards.
+        #
+        # This UNDERSTATES the true excursion -- intraday reach is lost --
+        # which is the honest direction to be wrong in, and each occurrence
+        # records which basis it used so the page can say so rather than
+        # presenting the two as the same measurement.
+        ohlc_trusted = all(r.get("ohlc_ok") for r in pp)
+        if ohlc_trusted:
+            max_high = max(r["high"] for r in pp)
+            min_low = min(r["low"] for r in pp)
+        else:
+            max_high = max(r["close"] for r in pp)
+            min_low = min(r["close"] for r in pp)
 
         start_d = pp[0]["date"]
         end_d = pp[-1]["date"]
@@ -398,6 +428,7 @@ def get_occurrences(prices: list[dict], periods: list[dict], grid_q: int, compas
             "high_pct": round((max_high / entry_close - 1.0) * 100.0, 2),
             "low_pct": round((min_low / entry_close - 1.0) * 100.0, 2),
             "return_pct": round((exit_close / entry_close - 1.0) * 100.0, 2),
+            "excursion_basis": "ohlc" if ohlc_trusted else "close",
         }
         if trend_ctx is not None:
             occ.update(trend_at_entry(trend_ctx, start_d))
