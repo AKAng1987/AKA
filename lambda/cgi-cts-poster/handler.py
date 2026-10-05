@@ -320,7 +320,39 @@ def run() -> dict:
     return out
 
 
+def selftest() -> dict:
+    """Read-only connection check, run with the function's OWN environment.
+
+    Invoke with {"selftest": true}. It signs in and calls `whoami`, which consumes no quota
+    and posts nothing, so the CTS token and address never have to pass through anyone's hands:
+    set them in the Lambda console, run this, and read the result. Nothing returned here
+    contains the token.
+    """
+    missing = [n for n, v in (("CTS_MCP_URL", CTS_MCP_URL),
+                              ("CTS_AGENT_TOKEN or CTS_SECRET_ID",
+                               os.environ.get("CTS_AGENT_TOKEN") or os.environ.get("CTS_SECRET_ID"))) if not v]
+    if missing:
+        return {"ok": False, "missing": missing}
+    try:
+        token = _token()
+        _, sid = _rpc(token, {"jsonrpc": "2.0", "id": 1, "method": "initialize",
+                              "params": {"protocolVersion": PROTOCOL, "capabilities": {},
+                                         "clientInfo": {"name": "cgi-cts-poster", "version": "1"}}})
+        _rpc(token, {"jsonrpc": "2.0", "method": "notifications/initialized"}, sid)
+        resp, _ = _rpc(token, {"jsonrpc": "2.0", "id": 2, "method": "tools/call",
+                               "params": {"name": "whoami", "arguments": {}}}, sid)
+    except urllib.error.HTTPError as exc:
+        return {"ok": False, "error": f"HTTP {exc.code}", "hint": "401 means the token is wrong, disabled or rotated"}
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "error": f"{type(exc).__name__}: {str(exc)[:200]}"}
+    if not resp or "error" in resp or (resp.get("result") or {}).get("isError"):
+        return {"ok": False, "error": json.dumps((resp or {}).get("error") or (resp or {}).get("result"))[:300]}
+    return {"ok": True, "dry_run": DRY_RUN, "whoami": resp.get("result")}
+
+
 def lambda_handler(event, context):  # noqa: ANN001
+    if isinstance(event, dict) and event.get("selftest"):
+        return selftest()
     return run()
 
 

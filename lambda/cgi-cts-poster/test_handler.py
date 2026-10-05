@@ -1,5 +1,6 @@
 """python3 -m unittest test_handler -- no network, no AWS."""
 import datetime as dt
+import json
 import unittest
 from unittest import mock
 
@@ -158,6 +159,36 @@ class Run(unittest.TestCase):
             with self.assertRaises(RuntimeError) as cm:
                 h._rpc("t", {})
         self.assertIn("CTS_MCP_URL", str(cm.exception))
+
+    def test_selftest_reports_what_is_missing_without_failing(self):
+        with mock.patch.object(h, "CTS_MCP_URL", ""), mock.patch.dict(h.os.environ, {}, clear=True):
+            out = h.lambda_handler({"selftest": True}, None)
+        self.assertFalse(out["ok"])
+        self.assertIn("CTS_MCP_URL", out["missing"])
+
+    def test_selftest_signs_in_calls_whoami_and_never_returns_the_token(self):
+        secret = "FAKE-CREDENTIAL-FOR-TESTS-ONLY-0000"
+        calls = []
+        def rpc(token, payload, session=None):
+            calls.append(payload.get("method") + ":" + str((payload.get("params") or {}).get("name")))
+            if payload.get("method") == "tools/call":
+                return {"result": {"content": [{"text": "bot grid-compass-bot"}]}}, session
+            return {"result": {}}, "sid1"
+        with mock.patch.object(h, "CTS_MCP_URL", "https://cts.example.invalid/mcp"), \
+             mock.patch.dict(h.os.environ, {"CTS_AGENT_TOKEN": secret}), mock.patch.object(h, "_rpc", side_effect=rpc):
+            out = h.lambda_handler({"selftest": True}, None)
+        self.assertTrue(out["ok"])
+        self.assertIn("tools/call:whoami", calls)
+        self.assertNotIn("post_idea", " ".join(calls))             # read-only: never posts
+        self.assertNotIn(secret, json.dumps(out))                  # and never echoes the credential
+
+    def test_selftest_turns_an_http_401_into_a_hint_not_a_crash(self):
+        import urllib.error
+        err = urllib.error.HTTPError("u", 401, "unauthorized", {}, None)
+        with mock.patch.object(h, "CTS_MCP_URL", "https://cts.example.invalid/mcp"), \
+             mock.patch.dict(h.os.environ, {"CTS_AGENT_TOKEN": "x"}), mock.patch.object(h, "_rpc", side_effect=err):
+            out = h.lambda_handler({"selftest": True}, None)
+        self.assertFalse(out["ok"]); self.assertEqual(out["error"], "HTTP 401")
 
     def test_old_state_is_pruned(self):
         old = (dt.date.today() - dt.timedelta(days=90)).isoformat()
