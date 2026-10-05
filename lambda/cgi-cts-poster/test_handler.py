@@ -287,6 +287,20 @@ class Run(unittest.TestCase):
         self.assertTrue(out["posted"]); self.assertEqual(len(self.posts), 1)
         self.assertIn(h.event_key(FLIP), self.saved[-1])                              # re-recorded
 
+    def test_inspect_returns_the_stored_fields_and_posts_nothing(self):
+        calls = []
+        def rpc(token, payload, session=None):
+            calls.append((payload.get("params") or {}).get("name") or payload.get("method"))
+            if payload.get("method") == "tools/call":
+                body = json.dumps({"postId": "p1", "text": "t", "imageCount": 1, "tags": ["regime"], "secret": "no"})
+                return {"result": {"content": [{"text": body}]}}, session
+            return {"result": {}}, "sid"
+        with mock.patch.object(h, "_rpc", side_effect=rpc), mock.patch.dict(h.os.environ, {"CTS_AGENT_TOKEN": "x"}):
+            out = h.lambda_handler({"inspect": "p1"}, None)
+        self.assertTrue(out["ok"]); self.assertEqual(out["post"]["imageCount"], 1)
+        self.assertNotIn("secret", out["post"])                        # only the whitelisted fields come back
+        self.assertIn("get_post", calls); self.assertNotIn("post_idea", calls)
+
     def test_old_state_is_pruned(self):
         old = (dt.date.today() - dt.timedelta(days=90)).isoformat()
         self.assertEqual(h.prune({"a": old, "b": dt.date.today().isoformat()}, dt.date.today()),

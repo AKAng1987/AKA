@@ -447,9 +447,38 @@ def replay(spec: dict, preview: bool, repost: bool = False) -> dict:
     return {"ok": True, "posted": True, "key": key, "result": result}
 
 
+def inspect_post(post_id: str) -> dict:
+    """Read-only: what CTS actually stored for one post (text, tags, image count). Posts nothing.
+
+    The post call only says "Posted"; this is how to confirm the picture really attached.
+    """
+    if not CTS_MCP_URL or not (os.environ.get("CTS_AGENT_TOKEN") or os.environ.get("CTS_SECRET_ID")):
+        return {"ok": False, "error": "CTS_MCP_URL and a token must be set on the function"}
+    try:
+        token = _token()
+        _, sid = _rpc(token, {"jsonrpc": "2.0", "id": 1, "method": "initialize",
+                              "params": {"protocolVersion": PROTOCOL, "capabilities": {},
+                                         "clientInfo": {"name": "cgi-cts-poster", "version": "1"}}})
+        _rpc(token, {"jsonrpc": "2.0", "method": "notifications/initialized"}, sid)
+        resp, _ = _rpc(token, {"jsonrpc": "2.0", "id": 2, "method": "tools/call",
+                               "params": {"name": "get_post", "arguments": {"postId": post_id}}}, sid)
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "error": f"{type(exc).__name__}: {str(exc)[:200]}"}
+    if not resp or "error" in resp or (resp.get("result") or {}).get("isError"):
+        return {"ok": False, "error": json.dumps((resp or {}).get("error") or (resp or {}).get("result"))[:300]}
+    try:
+        post = json.loads(resp["result"]["content"][0]["text"])
+    except (KeyError, IndexError, ValueError):
+        return {"ok": True, "raw": resp.get("result")}
+    keep = ("postId", "text", "tickers", "tags", "imageCount", "hasChart", "isAgent", "createdAt", "runId")
+    return {"ok": True, "post": {k: post.get(k) for k in keep if k in post}}
+
+
 def lambda_handler(event, context):  # noqa: ANN001
     if isinstance(event, dict) and event.get("selftest"):
         return selftest()
+    if isinstance(event, dict) and event.get("inspect"):
+        return inspect_post(str(event["inspect"]))
     if isinstance(event, dict) and event.get("replay"):
         return replay(event["replay"], preview=bool(event.get("preview")), repost=bool(event.get("repost")))
     return run()
