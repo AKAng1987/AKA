@@ -18,6 +18,11 @@ fifty-six symbols.
   plan   -- print the symbols that need a source check, with their tickers
   apply  -- read fetched bars on stdin, post only what is new, heartbeat
 
+  lists plan             -- compare /api/watchlists with what was last written to the three
+                            TradingView lists; print remove/add only for lists that differ
+  lists done ID=HASH ... -- record that those lists were written (refuses if the API moved)
+  lists verify           -- weekly: stdin {id: [symbols TradingView holds]}; reports drift
+
 USAGE (from the scheduled task)
 
   python3 scripts/cgi_refresh.py plan
@@ -31,8 +36,10 @@ anything at or before the last stored row anyway, so re-sending is safe.
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
 import json
 import os
+import pathlib
 import sys
 import urllib.error
 import urllib.request
@@ -166,10 +173,119 @@ def apply_() -> int:
     return 1 if failed else 0
 
 
+# ── TradingView list sync: write only on change ─────────────────────────────
+#
+# The three CGI watchlists change a few times a month, so the routine must not re-write
+# them daily. The API cannot see TradingView, so this keeps a small local record of what
+# was LAST WRITTEN and diffs the API's desired lists against it: nothing changed means no
+# TradingView call at all. The model only runs the remove/add arrays printed here.
+#
+# The tools do not replace a list, so a rewrite is remove(everything we last wrote) then
+# add(desired) -- not atomic, which is why `verify` exists: weekly, the model reads the lists
+# back and drift (a manual edit, an interrupted rewrite) is caught and repaired.
+STATE_PATH = pathlib.Path(os.environ.get("CGI_LISTS_STATE", "~/.cgi/tv_lists_state.json")).expanduser()
+
+
+def _lists_state() -> dict:
+    try:
+        return json.loads(STATE_PATH.read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def _save_lists_state(state: dict) -> None:
+    STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    STATE_PATH.write_text(json.dumps(state, indent=1))
+
+
+def _hash(symbols: list[str]) -> str:
+    return hashlib.sha1("\n".join(symbols).encode()).hexdigest()[:10]
+
+
+def diff_lists(desired: dict[str, list[str]], state: dict) -> list[dict]:
+    """Pure: per list, what to do. `desired` = {id: symbols}; `state` = {id: {symbols}}."""
+    out = []
+    for lid, want in desired.items():
+        have = (state.get(lid) or {}).get("symbols")
+        if have is None:
+            out.append({"id": lid, "action": "read_first", "hash": _hash(want),
+                        "why": "no record of what was written; get_watchlist, then `lists verify`"})
+        elif have == want:
+            out.append({"id": lid, "action": "unchanged"})
+        else:
+            out.append({"id": lid, "action": "rewrite", "hash": _hash(want),
+                        "remove": have, "add": want})
+    return out
+
+
+def lists_plan() -> int:
+    desired = {str(w["watchlist_id"]): w["symbols"] for w in _get("/api/watchlists")["watchlists"]}
+    plan_ = diff_lists(desired, _lists_state())
+    changed = [p for p in plan_ if p["action"] != "unchanged"]
+    print(json.dumps({"any_change": bool(changed), "lists": plan_}, indent=1, ensure_ascii=False))
+    if not changed:
+        print("\n# all three lists match what was last written -- no TradingView call needed",
+              file=sys.stderr)
+    return 0
+
+
+def lists_done(args: list[str]) -> int:
+    """Record that lists were written. Refuses if the API's lists have moved since `plan`, so
+    nothing is ever recorded as written that the model was not actually told to write."""
+    desired = {str(w["watchlist_id"]): w["symbols"] for w in _get("/api/watchlists")["watchlists"]}
+    state, bad = _lists_state(), []
+    for a in args:
+        lid, _, h = a.partition("=")
+        if lid not in desired or _hash(desired[lid]) != h:
+            bad.append(lid)
+            continue
+        state[lid] = {"symbols": desired[lid], "written": dt.date.today().isoformat()}
+    _save_lists_state(state)
+    if bad:
+        print(f"NOT recorded (API changed since plan, or unknown id): {bad} -- re-run `lists plan`",
+              file=sys.stderr)
+        return 1
+    print("recorded:", ", ".join(a.split("=")[0] for a in args))
+    return 0
+
+
+def lists_verify() -> int:
+    """stdin {id: [symbols TradingView holds now]}. Records reality, and reports drift."""
+    try:
+        held = {str(k): v for k, v in json.loads(sys.stdin.read() or "{}").items()}
+    except json.JSONDecodeError as exc:
+        print(f"stdin was not JSON: {exc}", file=sys.stderr)
+        return 2
+    desired = {str(w["watchlist_id"]): w["symbols"] for w in _get("/api/watchlists")["watchlists"]}
+    state, out = _lists_state(), []
+    for lid, now in held.items():
+        want = desired.get(lid)
+        prior = (state.get(lid) or {}).get("symbols")
+        row = {"id": lid, "matches_desired": now == want, "matches_last_written": now == prior}
+        if now != want and want is not None:
+            row.update(action="rewrite", hash=_hash(want), remove=now, add=want)
+        else:
+            row["action"] = "none"
+        out.append(row)
+        state[lid] = {"symbols": now, "verified": dt.date.today().isoformat()}   # reality, not belief
+    _save_lists_state(state)
+    print(json.dumps({"drift": any(r["action"] != "none" for r in out), "lists": out},
+                     indent=1, ensure_ascii=False))
+    return 0
+
+
 if __name__ == "__main__":
     cmd = sys.argv[1] if len(sys.argv) > 1 else ""
     if cmd == "plan":
         raise SystemExit(plan())
     if cmd == "apply":
         raise SystemExit(apply_())
-    raise SystemExit("usage: cgi_refresh.py plan | apply")
+    if cmd == "lists":
+        sub = sys.argv[2] if len(sys.argv) > 2 else ""
+        if sub == "plan":
+            raise SystemExit(lists_plan())
+        if sub == "done":
+            raise SystemExit(lists_done(sys.argv[3:]))
+        if sub == "verify":
+            raise SystemExit(lists_verify())
+    raise SystemExit("usage: cgi_refresh.py plan | apply | lists plan | lists done ID=HASH... | lists verify")
