@@ -44,7 +44,13 @@ import sys
 import urllib.error
 import urllib.request
 
-API = os.environ.get("CGI_API_URL", "https://cgi-api-9mim.onrender.com").rstrip("/")
+# Through VERCEL, not Render. This routine runs on the user's own machine, and the networks
+# that machine sits on sinkhole *.onrender.com (DNS answers with a private 192.168.x address)
+# while vercel.app stays reachable. The first weekday run, 2026-10-05, failed with "Network
+# is unreachable" on every call and wrote no heartbeat. Every endpoint used here has a
+# same-origin proxy under web/app/api: /api/freshness, /api/freshness/heartbeat,
+# /api/series/<symbol> and /api/watchlists.
+API = os.environ.get("CGI_API_URL", "https://cgi-vercel.vercel.app").rstrip("/")
 TIMEOUT = 180
 MAX_ROWS_PER_CALL = 24          # the endpoint's own cap
 

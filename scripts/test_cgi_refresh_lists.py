@@ -89,5 +89,22 @@ class Flow(unittest.TestCase):
         self.assertFalse(r.STATE_PATH.exists())
 
 
+class Defaults(unittest.TestCase):
+    def test_the_routine_does_not_default_to_a_host_its_networks_sinkhole(self):
+        # 2026-10-05: the first weekday run failed with "Network is unreachable" because the
+        # machine's networks answer *.onrender.com with a private address. Everything the
+        # routine calls goes through vercel.app, which stays reachable.
+        saved = os.environ.pop("CGI_API_URL", None)
+        try:
+            import importlib
+            importlib.reload(r)
+            self.assertNotIn("onrender.com", r.API)
+            self.assertIn("vercel.app", r.API)
+        finally:
+            if saved is not None:
+                os.environ["CGI_API_URL"] = saved
+            importlib.reload(r)
+
+
 if __name__ == "__main__":
     unittest.main()
