@@ -9,3 +9,6 @@ __pycache__/
 cache/
 data_download/
 .streamlit/secrets.toml
+
+# built Lambda packages for the CTS poster contain handler.py; never commit them
+lambda/cgi-cts-poster/*.zip

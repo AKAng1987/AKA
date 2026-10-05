@@ -1,0 +1,9 @@
+{"Version":"2012-10-17","Statement":[
+ {"Effect":"Allow","Action":["logs:CreateLogGroup","logs:CreateLogStream","logs:PutLogEvents"],
+  "Resource":"arn:aws:logs:ap-southeast-1:369568916817:log-group:/aws/lambda/cgi-cts-poster:*"},
+ {"Effect":"Allow","Action":["s3:GetObject","s3:PutObject"],
+  "Resource":"arn:aws:s3:::cmon-stage-backend-369568916817-ap-southeast-1-reports/State/cts_alerts_posted.json"},
+ {"Sid":"ListOnlyToReportMissingAsNoSuchKey","Effect":"Allow","Action":"s3:ListBucket",
+  "Resource":"arn:aws:s3:::cmon-stage-backend-369568916817-ap-southeast-1-reports",
+  "Condition":{"StringEquals":{"s3:prefix":["State/cts_alerts_posted.json"]}}}
+]}
