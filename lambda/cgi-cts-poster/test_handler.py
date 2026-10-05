@@ -19,7 +19,7 @@ TICKS = ["COPX", "XME", "SLX", "GDXJ", "SEA", "SILVER", "INDA", "IHI", "CORN", "
 def wl(regime="C3G1"):
     row = lambda t: {"ticker": t}
     return {"current": {"compass": 3, "grid": 1},
-            "watchlists": [{"name": "CGI · now", "regime": regime,
+            "watchlists": [{"name": "CGI · now", "watchlist_id": "347463015", "regime": regime,
                             "best": [row(t) for t in TICKS], "worst": [row(t + "W") for t in TICKS]}]}
 
 
@@ -34,26 +34,6 @@ class Pure(unittest.TestCase):
 
     def test_already_posted_is_skipped(self):
         self.assertEqual(h.select_events([FLIP], {h.event_key(FLIP)}), [])
-
-    def test_regime_post_fits_cap_and_keeps_both_lists(self):
-        idea = h.compose_regime(FLIP, wl()["watchlists"][0], "2026-10-14")
-        self.assertLessEqual(len(idea["text"]), h.SOFT_CAP)
-        self.assertIn("Best 20", idea["text"]); self.assertIn("Worst 20", idea["text"])
-        self.assertIn("C3G1", idea["text"])
-        self.assertEqual(idea["tickers"], [])
-
-    def test_full_lists_kept_when_they_fit(self):
-        idea = h.compose_regime(FLIP, wl()["watchlists"][0], "d")
-        self.assertNotRegex(idea["text"], r"\(\+\d+\)")          # nothing trimmed, nothing claimed trimmed
-
-    def test_trim_is_stated_not_hidden(self):
-        long_ = {"name": "CGI · now", "regime": "C3G1",
-                 "best": [{"ticker": f"LONGTICKER{i:02d}"} for i in range(20)],
-                 "worst": [{"ticker": f"WORSTTICKR{i:02d}"} for i in range(20)]}
-        idea = h.compose_regime(FLIP, long_, "d")
-        self.assertLessEqual(len(idea["text"]), h.SOFT_CAP)
-        self.assertRegex(idea["text"], r"\(\+\d+\)")               # says how many were left off
-        self.assertIn("Best 20", idea["text"])                       # and still states the true list size
 
     def test_model_names_become_quadrants(self):
         self.assertEqual(h._plain("grid_US 2 -> 1; x"), "G2 → G1; x")
@@ -82,6 +62,52 @@ class Pure(unittest.TestCase):
         self.assertIn("(2026-09-30)", idea["text"]); self.assertIn("G3 → G2", idea["text"])
         self.assertNotIn("grid 3", idea["text"])
 
+    def test_regime_post_is_short_and_links_to_the_list_and_the_app(self):
+        tv = "https://www.tradingview.com/watchlists/347463015/"
+        idea = h.compose_regime(FLIP, wl()["watchlists"][0], "2026-10-05", tv)
+        self.assertLessEqual(len(idea["text"]), h.SOFT_CAP)
+        self.assertIn(tv, idea["text"]); self.assertIn(h.APP_URL, idea["text"])
+        self.assertNotIn("Best 20", idea["text"])                      # the lists live in the TradingView list now
+        self.assertEqual(idea["images"][0]["url"], f"{h.APP_URL}/share/regime.png?v=2026-10-05")
+        self.assertEqual(len(idea["images"]), 1)                       # ONE picture: the regime card
+
+    def test_the_tradingview_link_comes_from_the_served_id(self):
+        self.assertEqual(h.tv_list_url(wl()), "https://www.tradingview.com/watchlists/347463015/")
+        self.assertIsNone(h.tv_list_url({"watchlists": []}))
+        idea = h.compose_regime(FLIP, wl()["watchlists"][0], "d", None)   # no list served -> app link only
+        self.assertNotIn("tradingview.com", idea["text"]); self.assertIn(h.APP_URL, idea["text"])
+
+    def test_theme_posts_carry_the_links_but_no_picture(self):
+        idea = h.compose_theme(ONSET, "d", "https://www.tradingview.com/watchlists/1/")
+        self.assertIn("tradingview.com/watchlists/1/", idea["text"]); self.assertIn(h.APP_URL, idea["text"])
+        self.assertNotIn("images", idea)
+
+    def test_verify_image_accepts_a_real_png_and_rejects_everything_else(self):
+        png = b"\x89PNG\r\n\x1a\n" + b"x" * 100
+        class R:
+            def __init__(self, status=200, ctype="image/png", body=png):
+                self.status, self.headers, self._b = status, {"Content-Type": ctype}, body
+                self.headers = type("H", (), {"get": lambda _s, k, d=None: {"Content-Type": ctype}.get(k, d)})()
+            def read(self, n=-1): return self._b[:n]
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+        def fake(r):
+            return mock.patch.object(h.urllib.request, "urlopen", return_value=r)
+        img = {"url": "https://x/share/regime.png"}
+        with fake(R()):                                self.assertTrue(h.verify_image(img))
+        with fake(R(ctype="text/html")):               self.assertFalse(h.verify_image(img))
+        with fake(R(body=b"not a png at all")):        self.assertFalse(h.verify_image(img))
+        with fake(R(body=png + b"x" * h.IMAGE_MAX_BYTES)): self.assertFalse(h.verify_image(img))   # over 5MB
+        with mock.patch.object(h.urllib.request, "urlopen", side_effect=OSError("down")):
+            self.assertFalse(h.verify_image(img))
+
+    def test_attach_images_drops_the_key_when_none_verify(self):
+        idea = {"text": "t", "images": [{"url": "u"}]}
+        with mock.patch.object(h, "verify_image", return_value=False):
+            self.assertNotIn("images", h.attach_images(dict(idea)))
+        with mock.patch.object(h, "verify_image", return_value=True):
+            self.assertIn("images", h.attach_images(dict(idea)))
+
     def test_regimes_agree(self):
         self.assertTrue(h.regimes_agree(brief([]), wl()))
         self.assertFalse(h.regimes_agree(brief([], grid=2), wl()))
@@ -102,6 +128,7 @@ class Run(unittest.TestCase):
             mock.patch.object(h, "DRY_RUN", False),
             # Live mode needs a URL; post_idea is mocked, so this placeholder is never contacted.
             mock.patch.object(h, "CTS_MCP_URL", "https://cts.example.invalid/mcp"),
+            mock.patch.object(h, "verify_image", return_value=True),
         ]
         for p in self.p: p.start()
         self.addCleanup(lambda: [p.stop() for p in self.p])
@@ -231,6 +258,34 @@ class Run(unittest.TestCase):
         self.assertFalse(h.replay({"kind": "cot_extreme", "when": "2026-10-14"}, preview=False)["ok"])
         self.assertFalse(h.replay({"kind": "regime_flip_grid"}, preview=False)["ok"])
         self.assertEqual(self.posts, [])
+
+    def test_a_regime_post_goes_out_with_its_picture_and_links(self):
+        self.state_ret = {}
+        h.run()
+        regime = next(p for p in self.posts if "regime" in p["tags"])
+        self.assertEqual(len(regime["images"]), 1); self.assertIn("tradingview.com/watchlists/347463015", regime["text"])
+        self.assertNotIn("images", next(p for p in self.posts if "themes" in p["tags"]))
+
+    def test_a_failed_picture_does_not_stop_the_post(self):
+        self.state_ret = {}
+        with mock.patch.object(h, "verify_image", return_value=False):
+            h.run()
+        regime = next(p for p in self.posts if "regime" in p["tags"])
+        self.assertNotIn("images", regime); self.assertIn(h.APP_URL, regime["text"])   # still posted, links intact
+
+    def test_replay_preview_shows_the_picture_url_to_open_before_posting(self):
+        self.state_ret = {}
+        out = h.replay({"kind": "regime_flip_grid", "when": "2026-10-14"}, preview=True)
+        self.assertTrue(out["idea"]["images"][0]["url"].endswith("/share/regime.png?v=" + h.dt.datetime.now(h.dt.timezone.utc).date().isoformat()))
+        self.assertEqual(self.posts, [])
+
+    def test_repost_posts_again_while_the_default_still_refuses(self):
+        self.state_ret = {h.event_key(FLIP): "2026-10-05"}
+        spec = {"kind": "regime_flip_grid", "when": "2026-10-14"}
+        self.assertTrue(h.replay(spec, preview=False)["already_posted"]); self.assertEqual(self.posts, [])
+        out = h.replay(spec, preview=False, repost=True)
+        self.assertTrue(out["posted"]); self.assertEqual(len(self.posts), 1)
+        self.assertIn(h.event_key(FLIP), self.saved[-1])                              # re-recorded
 
     def test_old_state_is_pruned(self):
         old = (dt.date.today() - dt.timedelta(days=90)).isoformat()

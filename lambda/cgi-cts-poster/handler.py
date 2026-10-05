@@ -72,6 +72,14 @@ THEME_KINDS = {"theme_onset", "theme_end"}
 ALERT_KINDS = REGIME_KINDS | THEME_KINDS
 
 SOFT_CAP = 600          # AGENT-PROMPT-GUIDE: one condensed paragraph
+
+# The post links to the app and carries ONE picture, the regime card, drawn by the app at /share/regime.png.
+# CTS's own server fetches the picture from this URL (20s timeout) and re-hosts it, so it must be public.
+APP_URL = os.environ.get("APP_URL", "https://cgi-vercel.vercel.app").rstrip("/")
+REGIME_IMAGE_PATH = "/share/regime.png"
+IMAGE_MAX_BYTES = 5 * 1024 * 1024     # the CTS limit
+IMAGE_TIMEOUT = 25
+NOW_LIST_NAME = "CGI · now"
 PROTOCOL = "2025-03-26"
 
 
@@ -119,40 +127,73 @@ def _plain(detail: str) -> str:
                   detail or "")
 
 
-def compose_regime(c: dict, wl_now: dict, date: str) -> dict:
-    """Regime-flip post. Lists are trimmed evenly until it fits the soft cap,
-    and the trim is stated, never hidden."""
-    best = [r["ticker"] for r in wl_now.get("best", [])]
-    worst = [r["ticker"] for r in wl_now.get("worst", [])]
+def tv_list_url(watchlists: dict, name: str = NOW_LIST_NAME) -> str | None:
+    """Public TradingView link to a CGI list, built from the id the API serves, never typed."""
+    w = next((x for x in watchlists.get("watchlists", []) if x.get("name") == name), None)
+    return f"https://www.tradingview.com/watchlists/{w['watchlist_id']}/" if w and w.get("watchlist_id") else None
+
+
+def _links(tv_url: str | None) -> list[str]:
+    lines = []
+    if tv_url:
+        lines.append(f"Best / worst 20 for this regime (TradingView): {tv_url}")
+    lines.append(f"CGI app: {APP_URL}")
+    return lines
+
+
+def compose_regime(c: dict, wl_now: dict, date: str, tv_url: str | None = None) -> dict:
+    """Regime-flip post: what flipped and the new regime, the regime card as a picture, and links.
+
+    The best/worst 20 used to be listed in the text. They now live in the TradingView list the
+    post links to, so the text stays short and the list cannot go stale inside a post.
+    """
     regime = wl_now.get("regime", "?")
     when = f" ({c['when']})" if c.get("when") else ""
     head = (f"Regime shift{when}: {c['title']}. CGI now reads {regime}. {_plain(c.get('detail', ''))}".rstrip(". ")
             + ".")
-
-    def body(nb: int, nw: int) -> str:
-        parts = [head]
-        if nb:
-            more = f" (+{len(best) - nb})" if nb < len(best) else ""
-            parts.append(f"Best {len(best)} here: {', '.join(best[:nb])}{more}.")
-        if nw:
-            more = f" (+{len(worst) - nw})" if nw < len(worst) else ""
-            parts.append(f"Worst {len(worst)}: {', '.join(worst[:nw])}{more}.")
-        return " ".join(parts)
-
-    nb, nw = len(best), len(worst)
-    text = body(nb, nw)
-    while len(text) > SOFT_CAP and (nb > 3 or nw > 3):
-        if nb >= nw and nb > 3:
-            nb -= 1
-        elif nw > 3:
-            nw -= 1
-        text = body(nb, nw)
-    return {"text": text, "tickers": [], "tags": ["regime", "macro"], "runId": f"cgi-{date}"}
+    return {"text": "\n".join([head] + _links(tv_url))[:SOFT_CAP], "tickers": [],
+            "tags": ["regime", "macro"], "runId": f"cgi-{date}",
+            "images": [{"url": f"{APP_URL}{REGIME_IMAGE_PATH}?v={date}",
+                        "caption": f"CGI regime card, {regime}, as of {date}"}]}
 
 
-def compose_theme(c: dict, date: str) -> dict:
-    text = f"Theme change: {c['title']}. {c.get('detail', '')}".rstrip(". ") + "."
-    return {"text": text[:SOFT_CAP], "tickers": [], "tags": ["themes", "macro"], "runId": f"cgi-{date}"}
+def compose_theme(c: dict, date: str, tv_url: str | None = None) -> dict:
+    head = f"Theme change: {c['title']}. {c.get('detail', '')}".rstrip(". ") + "."
+    return {"text": "\n".join([head] + _links(tv_url))[:SOFT_CAP], "tickers": [],
+            "tags": ["themes", "macro"], "runId": f"cgi-{date}"}
+
+
+def verify_image(img: dict) -> bool:
+    """Is this picture safe to hand to CTS? 200, a real PNG, under their 5MB limit.
+
+    CTS fetches the URL itself with a 20s timeout. Fetching it here first also wakes the app and
+    the API and primes the cache, so their fetch finds it warm. A picture that fails is simply
+    left off: the post still goes out with its text and links.
+    """
+    try:
+        req = urllib.request.Request(img["url"], headers={"User-Agent": "cgi-cts-poster"})
+        with urllib.request.urlopen(req, timeout=IMAGE_TIMEOUT) as r:
+            status = r.status
+            ctype = (r.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+            body = r.read(IMAGE_MAX_BYTES + 1)
+    except Exception as exc:  # noqa: BLE001
+        print(f"[image] unusable, posting without it: {type(exc).__name__}: {str(exc)[:120]}")
+        return False
+    ok = (status == 200 and ctype == "image/png" and 0 < len(body) <= IMAGE_MAX_BYTES
+          and body[:8] == b"\x89PNG\r\n\x1a\n")
+    if not ok:
+        print(f"[image] unusable, posting without it: status={status} type={ctype} bytes={len(body)}")
+    return ok
+
+
+def attach_images(idea: dict) -> dict:
+    """Keep only the pictures that verify; drop the key when none do."""
+    good = [i for i in idea.get("images", []) if verify_image(i)]
+    if good:
+        idea["images"] = good
+    else:
+        idea.pop("images", None)
+    return idea
 
 
 def prune(posted: dict[str, str], today: dt.date) -> dict[str, str]:
@@ -289,6 +330,7 @@ def run() -> dict:
     posted = prune(state, today)
     todo = select_events(candidates, set(posted))
     wl_now = _now_list(watchlists)
+    tv_url = tv_list_url(watchlists)
     agree = regimes_agree(brief, watchlists)
 
     sent, deferred, failed = [], [], []
@@ -300,9 +342,9 @@ def run() -> dict:
             if wl_now is None or not agree:
                 deferred.append((event_key(c), "watchlists still show the previous regime"))
                 continue
-            idea = compose_regime(c, wl_now, date)
+            idea = attach_images(compose_regime(c, wl_now, date, tv_url))
         else:
-            idea = compose_theme(c, date)
+            idea = compose_theme(c, date, tv_url)
 
         if DRY_RUN:
             print(f"[dry-run] WOULD POST ({len(idea['text'])} chars): {json.dumps(idea, ensure_ascii=False)}")
@@ -356,7 +398,7 @@ def selftest() -> dict:
     return {"ok": True, "dry_run": DRY_RUN, "whoami": resp.get("result")}
 
 
-def replay(spec: dict, preview: bool) -> dict:
+def replay(spec: dict, preview: bool, repost: bool = False) -> dict:
     """Post ONE named recent event on demand, e.g. {"kind": "regime_flip_grid", "when": "2026-09-30"}.
 
     For an event the daily run could not have seen (it only looks back a day) or to prove the
@@ -365,7 +407,9 @@ def replay(spec: dict, preview: bool) -> dict:
       * only alert kinds, and the event must exist exactly once;
       * a regime post is refused if a LATER regime flip exists or the watchlists still show another
         regime, because "CGI now reads ..." and the best/worst lists would then be wrong;
-      * already posted (per the same de-dup record the daily run uses) -> not posted twice;
+      * already posted (per the same de-dup record the daily run uses) -> not posted twice, UNLESS
+        repost=True, which bypasses only this check (used once to check a new post format; it
+        re-records the event, so the daily run cannot post it either);
       * preview=True (or DRY_RUN) prints what it would send and writes nothing.
     """
     kind, when = spec.get("kind"), spec.get("when")
@@ -385,13 +429,13 @@ def replay(spec: dict, preview: bool) -> dict:
             return {"ok": False, "error": f"a later regime flip exists ({later}); this one is no longer the current regime"}
         if wl_now is None or not regimes_agree(brief, watchlists):
             return {"ok": False, "error": "watchlists still show a different regime than the brief; try again later"}
-        idea = compose_regime(c, wl_now, date)
+        idea = attach_images(compose_regime(c, wl_now, date, tv_list_url(watchlists)))
     else:
-        idea = compose_theme(c, date)
+        idea = compose_theme(c, date, tv_list_url(watchlists))
     idea["tags"] = idea["tags"] + ["replay"]
     key = event_key(c)
     state = load_state() or {}
-    if key in state:
+    if key in state and not repost:
         return {"ok": True, "already_posted": True, "key": key}
     if preview or DRY_RUN:
         return {"ok": True, "previewed": True, "key": key, "chars": len(idea["text"]), "idea": idea}
@@ -407,7 +451,7 @@ def lambda_handler(event, context):  # noqa: ANN001
     if isinstance(event, dict) and event.get("selftest"):
         return selftest()
     if isinstance(event, dict) and event.get("replay"):
-        return replay(event["replay"], preview=bool(event.get("preview")))
+        return replay(event["replay"], preview=bool(event.get("preview")), repost=bool(event.get("repost")))
     return run()
 
 
