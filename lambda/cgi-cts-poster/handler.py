@@ -50,6 +50,7 @@ import urllib.error
 import urllib.request
 
 BRIEF_URL = os.environ.get("BRIEF_URL", "https://cgi-vercel.vercel.app/api/brief?cadence=daily")
+WEEKLY_BRIEF_URL = os.environ.get("WEEKLY_BRIEF_URL", "https://cgi-vercel.vercel.app/api/brief?cadence=weekly")
 WATCHLISTS_URL = os.environ.get("WATCHLISTS_URL", "https://cgi-vercel.vercel.app/api/watchlists")
 # Needed for LIVE posting only (DRY_RUN needs nothing). Deliberately NO default: the address of
 # the CTS Ideas service is internal to the user's employer and this repository is public. Set it
@@ -108,8 +109,12 @@ def _now_list(watchlists: dict) -> dict | None:
 
 
 def _plain(detail: str) -> str:
-    """'grid_US 2 -> 1' is a model name; readers know it as G2 -> G1."""
-    return re.sub(r"\b(compass|grid)_US (\d) -> (\d)",
+    """'grid 3 -> 2' (or 'grid_US 3 -> 2') is a model name; readers know it as G3 -> G2.
+
+    The live brief writes 'grid 3 -> 2' with no _US; an earlier version of this only matched
+    the _US form because the test fixture was written from an assumption, not from real data.
+    """
+    return re.sub(r"\b(compass|grid)(?:_US)?\s+(\d)\s*->\s*(\d)",
                   lambda m: f"{m.group(1)[0].upper()}{m.group(2)} → {m.group(1)[0].upper()}{m.group(3)}",
                   detail or "")
 
@@ -120,7 +125,8 @@ def compose_regime(c: dict, wl_now: dict, date: str) -> dict:
     best = [r["ticker"] for r in wl_now.get("best", [])]
     worst = [r["ticker"] for r in wl_now.get("worst", [])]
     regime = wl_now.get("regime", "?")
-    head = (f"Regime shift: {c['title']}. CGI now reads {regime}. {_plain(c.get('detail', ''))}".rstrip(". ")
+    when = f" ({c['when']})" if c.get("when") else ""
+    head = (f"Regime shift{when}: {c['title']}. CGI now reads {regime}. {_plain(c.get('detail', ''))}".rstrip(". ")
             + ".")
 
     def body(nb: int, nw: int) -> str:
@@ -350,9 +356,58 @@ def selftest() -> dict:
     return {"ok": True, "dry_run": DRY_RUN, "whoami": resp.get("result")}
 
 
+def replay(spec: dict, preview: bool) -> dict:
+    """Post ONE named recent event on demand, e.g. {"kind": "regime_flip_grid", "when": "2026-09-30"}.
+
+    For an event the daily run could not have seen (it only looks back a day) or to prove the
+    post path against the real server. Looks the event up in the WEEKLY brief, so it posts what
+    CGI actually recorded, never text supplied by hand. Guards:
+      * only alert kinds, and the event must exist exactly once;
+      * a regime post is refused if a LATER regime flip exists or the watchlists still show another
+        regime, because "CGI now reads ..." and the best/worst lists would then be wrong;
+      * already posted (per the same de-dup record the daily run uses) -> not posted twice;
+      * preview=True (or DRY_RUN) prints what it would send and writes nothing.
+    """
+    kind, when = spec.get("kind"), spec.get("when")
+    if kind not in ALERT_KINDS or not when:
+        return {"ok": False, "error": f"replay needs kind in {sorted(ALERT_KINDS)} and when=YYYY-MM-DD"}
+    brief, watchlists = _get_json(WEEKLY_BRIEF_URL), _get_json(WATCHLISTS_URL)
+    changes = brief.get("changes", [])
+    matches = [c for c in changes if c.get("kind") == kind and c.get("when") == when]
+    if len(matches) != 1:
+        return {"ok": False, "error": f"expected exactly one {kind} on {when} in the weekly brief, found {len(matches)}"}
+    c = matches[0]
+    date = dt.datetime.now(dt.timezone.utc).date().isoformat()
+    if kind in REGIME_KINDS:
+        later = [x["when"] for x in changes if x.get("kind") in REGIME_KINDS and (x.get("when") or "") > when]
+        wl_now = _now_list(watchlists)
+        if later:
+            return {"ok": False, "error": f"a later regime flip exists ({later}); this one is no longer the current regime"}
+        if wl_now is None or not regimes_agree(brief, watchlists):
+            return {"ok": False, "error": "watchlists still show a different regime than the brief; try again later"}
+        idea = compose_regime(c, wl_now, date)
+    else:
+        idea = compose_theme(c, date)
+    idea["tags"] = idea["tags"] + ["replay"]
+    key = event_key(c)
+    state = load_state() or {}
+    if key in state:
+        return {"ok": True, "already_posted": True, "key": key}
+    if preview or DRY_RUN:
+        return {"ok": True, "previewed": True, "key": key, "chars": len(idea["text"]), "idea": idea}
+    if not CTS_MCP_URL:
+        raise RuntimeError(_NO_URL)
+    result = post_idea(_token(), idea)
+    state[key] = date
+    save_state(state)
+    return {"ok": True, "posted": True, "key": key, "result": result}
+
+
 def lambda_handler(event, context):  # noqa: ANN001
     if isinstance(event, dict) and event.get("selftest"):
         return selftest()
+    if isinstance(event, dict) and event.get("replay"):
+        return replay(event["replay"], preview=bool(event.get("preview")))
     return run()
 
 

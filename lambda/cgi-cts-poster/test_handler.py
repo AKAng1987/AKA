@@ -73,6 +73,15 @@ class Pure(unittest.TestCase):
         with mock.patch.object(h, "_s3", return_value=fake):
             self.assertIsNone(h.load_state())
 
+    def test_the_real_brief_detail_shape_becomes_quadrants(self):
+        # copied from the live weekly brief on 2026-10-05, not written from an assumption
+        real = "grid 3 -> 2; pre-registered P(flip) was 40%"
+        self.assertEqual(h._plain(real), "G3 → G2; pre-registered P(flip) was 40%")
+        idea = h.compose_regime(dict(FLIP, detail=real, title="GROWTH flipped on GDP", when="2026-09-30"),
+                                wl()["watchlists"][0], "2026-10-05")
+        self.assertIn("(2026-09-30)", idea["text"]); self.assertIn("G3 → G2", idea["text"])
+        self.assertNotIn("grid 3", idea["text"])
+
     def test_regimes_agree(self):
         self.assertTrue(h.regimes_agree(brief([]), wl()))
         self.assertFalse(h.regimes_agree(brief([], grid=2), wl()))
@@ -189,6 +198,39 @@ class Run(unittest.TestCase):
              mock.patch.dict(h.os.environ, {"CTS_AGENT_TOKEN": "x"}), mock.patch.object(h, "_rpc", side_effect=err):
             out = h.lambda_handler({"selftest": True}, None)
         self.assertFalse(out["ok"]); self.assertEqual(out["error"], "HTTP 401")
+
+    def test_replay_posts_the_named_event_once_and_records_it(self):
+        self.state_ret = {}
+        out = h.replay({"kind": "regime_flip_grid", "when": "2026-10-14"}, preview=False)
+        self.assertTrue(out["posted"]); self.assertEqual(len(self.posts), 1)
+        self.assertIn("replay", self.posts[0]["tags"]); self.assertIn("(2026-10-14)", self.posts[0]["text"])
+        self.assertIn(h.event_key(FLIP), self.saved[-1])
+        self.state_ret = self.saved[-1]                                     # same record the daily run uses
+        again = h.replay({"kind": "regime_flip_grid", "when": "2026-10-14"}, preview=False)
+        self.assertTrue(again["already_posted"]); self.assertEqual(len(self.posts), 1)
+
+    def test_replay_preview_posts_and_saves_nothing(self):
+        self.state_ret = {}
+        out = h.replay({"kind": "regime_flip_grid", "when": "2026-10-14"}, preview=True)
+        self.assertTrue(out["previewed"]); self.assertEqual(self.posts, []); self.assertEqual(self.saved, [])
+        self.assertLessEqual(out["chars"], h.SOFT_CAP)
+
+    def test_replay_refuses_when_a_later_regime_flip_exists(self):
+        later = dict(FLIP, title="CREDIT flipped on SLOOS", when="2026-10-20")
+        self.brief = brief([FLIP, later])
+        out = h.replay({"kind": "regime_flip_grid", "when": "2026-10-14"}, preview=False)
+        self.assertFalse(out["ok"]); self.assertIn("later regime flip", out["error"]); self.assertEqual(self.posts, [])
+
+    def test_replay_refuses_when_watchlists_show_another_regime(self):
+        self.wl = wl(); self.wl["current"] = {"compass": 3, "grid": 2}
+        out = h.replay({"kind": "regime_flip_grid", "when": "2026-10-14"}, preview=False)
+        self.assertFalse(out["ok"]); self.assertEqual(self.posts, [])
+
+    def test_replay_refuses_unknown_events_and_non_alert_kinds(self):
+        self.assertFalse(h.replay({"kind": "regime_flip_grid", "when": "2026-01-01"}, preview=False)["ok"])
+        self.assertFalse(h.replay({"kind": "cot_extreme", "when": "2026-10-14"}, preview=False)["ok"])
+        self.assertFalse(h.replay({"kind": "regime_flip_grid"}, preview=False)["ok"])
+        self.assertEqual(self.posts, [])
 
     def test_old_state_is_pruned(self):
         old = (dt.date.today() - dt.timedelta(days=90)).isoformat()
