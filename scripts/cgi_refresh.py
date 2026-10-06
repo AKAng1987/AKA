@@ -83,6 +83,23 @@ def _post(path: str, body: dict) -> dict:
 CHECK_EVERY_DAYS = {"daily": 1, "weekly": 7, "monthly": 31,
                     "quarterly": 92, "annual": 366, "unknown": 7}
 
+# ...but "once a month since we last asked" can miss a print by a whole month: ISM services was asked on
+# 2026-10-03, printed on 2026-10-05, and would not have been asked again until ~2026-11-03 -- while it drives
+# the inflation and growth panels. The US surveys print on a known schedule (ISM: 1st/3rd business day of the
+# month after; Challenger: first week), so while their next print is due they are checked every run until it
+# lands, then go quiet again. Window = days after the NEXT period's stamp date.
+RELEASE_WINDOW = {sym: (29, 42) for sym in
+                  ("ISM_MFG_PMI", "ISM_MFG_PRICES", "ISM_SVC_ACTIVITY", "ISM_SVC_PRICES", "CHALLENGER")}
+
+
+def _in_release_window(sym: str, ours_date: str | None, today: dt.date) -> bool:
+    win = RELEASE_WINDOW.get(sym)
+    if not win or not ours_date:
+        return False
+    d = dt.date.fromisoformat(ours_date)
+    next_stamp = (d.replace(day=1) + dt.timedelta(days=32)).replace(day=1)
+    return win[0] <= (today - next_stamp).days <= win[1]
+
 
 def _state() -> dict:
     """Per-symbol record of when we last asked the source, from the heartbeat."""
@@ -102,7 +119,7 @@ def plan() -> int:
         sym = r["symbol"]
         every = CHECK_EVERY_DAYS.get(r.get("cadence") or "unknown", 7)
         last = checked.get(sym, {}).get("at")
-        if r["action"] != "load" and last:
+        if r["action"] != "load" and last and not _in_release_window(sym, r.get("ours_date"), today):
             try:
                 if (today - dt.date.fromisoformat(last)).days < every:
                     skipped += 1
