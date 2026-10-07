@@ -16,7 +16,8 @@ and makes the MCP calls in between, instead of reasoning its way through
 fifty-six symbols.
 
   plan   -- print the symbols that need a source check, with their tickers
-  apply  -- read fetched bars on stdin, post only what is new, heartbeat
+  referee-- print the ~15 benchmarks to fetch from TradingView as a second source
+  apply  -- read fetched bars on stdin, post only what is new, heartbeat (with "_referee" bars, if fetched)
 
   lists plan             -- compare /api/watchlists with what was last written to the three
                             TradingView lists; print remove/add only for lists that differ
@@ -167,6 +168,30 @@ def plan() -> int:
     return 0
 
 
+# The referee: ~15 benchmarks the morning run also fetches from TradingView (a second vendor), sent with the
+# heartbeat and compared server-side against what is stored (/api/freshness -> "referee"). Symbols are the
+# verified ones from api/tv_symbols; keep in step with REFEREE in api/freshness.py.
+REFEREE = {
+    "SPX": "TVC:SPX", "DJI": "TVC:DJI", "IXIC": "NASDAQ:IXIC", "RUT": "TVC:RUT", "SPY": "AMEX:SPY",
+    "QQQ": "NASDAQ:QQQ", "DBA": "AMEX:DBA", "UUP": "AMEX:UUP", "MAGS": "CBOE:MAGS", "VIX": "TVC:VIX",
+    "USOIL": "NYMEX:CL1!", "XAUUSD": "COMEX:GC1!", "NATGAS": "NYMEX:NG1!", "US10Y": "TVC:US10Y", "USDJPY": "FX:USDJPY",
+}
+
+
+def _trade_date(t: int) -> str:
+    """TradingView stamps a daily bar at its session OPEN. Futures, FX and Treasury sessions open the evening
+    before (18:00 ET), so the trading date is the New York date 8 hours after the stamp."""
+    from zoneinfo import ZoneInfo
+    return dt.datetime.fromtimestamp(int(t) + 8 * 3600, ZoneInfo("America/New_York")).date().isoformat()
+
+
+def referee_plan() -> int:
+    print(json.dumps({"fetch_with": "mcp-tv-get-ohlcv interval=1D count=5",
+                      "send_in_apply_as": '"_referee": {SYMBOL: [[t, c], ...]}',
+                      "symbols": REFEREE}, indent=1))
+    return 0
+
+
 def apply_() -> int:
     """Post what is genuinely new, then report. Never invents a bar."""
     try:
@@ -174,6 +199,15 @@ def apply_() -> int:
     except json.JSONDecodeError as exc:
         print(f"stdin was not JSON: {exc}", file=sys.stderr)
         return 2
+
+    raw_ref = fetched.pop("_referee", None) or {}
+    referee = {}
+    for sym, bars in raw_ref.items():
+        if sym in REFEREE and isinstance(bars, list):
+            try:
+                referee[sym] = [[_trade_date(b[0]), float(b[1])] for b in bars[-5:]]
+            except (TypeError, ValueError, IndexError):
+                print(f"referee: could not read bars for {sym}", file=sys.stderr)
 
     held = {r["symbol"]: r["ours_date"]
             for r in _get("/api/freshness")["manual"]["series"]}
@@ -217,7 +251,7 @@ def apply_() -> int:
     # and the failures are reported separately. Only a run that never
     # happens should read as dead.
     try:
-        _post("/api/freshness/heartbeat", {"summary": summary, "checked": checked})
+        _post("/api/freshness/heartbeat", {"summary": summary, "checked": checked, "referee": referee})
     except Exception as exc:  # noqa: BLE001
         print(f"heartbeat failed: {exc}", file=sys.stderr)
 
@@ -330,6 +364,8 @@ def lists_verify() -> int:
 
 if __name__ == "__main__":
     cmd = sys.argv[1] if len(sys.argv) > 1 else ""
+    if cmd == "referee":
+        raise SystemExit(referee_plan())
     if cmd == "plan":
         raise SystemExit(plan())
     if cmd == "apply":
