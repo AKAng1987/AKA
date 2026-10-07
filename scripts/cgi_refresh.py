@@ -84,20 +84,51 @@ CHECK_EVERY_DAYS = {"daily": 1, "weekly": 7, "monthly": 31,
                     "quarterly": 92, "annual": 366, "unknown": 7}
 
 # ...but "once a month since we last asked" can miss a print by a whole month: ISM services was asked on
-# 2026-10-03, printed on 2026-10-05, and would not have been asked again until ~2026-11-03 -- while it drives
-# the inflation and growth panels. The US surveys print on a known schedule (ISM: 1st/3rd business day of the
-# month after; Challenger: first week), so while their next print is due they are checked every run until it
-# lands, then go quiet again. Window = days after the NEXT period's stamp date.
-RELEASE_WINDOW = {sym: (29, 42) for sym in
-                  ("ISM_MFG_PMI", "ISM_MFG_PRICES", "ISM_SVC_ACTIVITY", "ISM_SVC_PRICES", "CHALLENGER")}
+# 2026-10-03, printed on 2026-10-05, and would not have been asked again until ~2026-11-03. So each series is
+# matched to its release calendar: while its NEXT print is normally due it is checked every run until it lands,
+# then it goes quiet. The 31/92-day rule above stays as the backstop for anything that misses its window.
+#
+# Windows are (first, last) days after the NEXT period's stamp date (a September print is stamped 2026-09-01),
+# taken from each source's usual schedule with a few days' margin either side. Policy rates move only at
+# meetings and are left to the backstop.
+RELEASE_WINDOW = {
+    # US surveys
+    "ISM_MFG_PMI": (29, 36), "ISM_MFG_PRICES": (29, 36),          # 1st business day of next month
+    "ISM_SVC_ACTIVITY": (31, 38), "ISM_SVC_PRICES": (31, 38),     # 3rd business day of next month
+    "CHALLENGER": (29, 40),                                       # first week of next month
+    # CPI
+    "KR_CPI_YOY": (29, 35),   # 1st-2nd of next month
+    "EU_CPI_YOY": (28, 35),   # flash, last day of the month / 1st of next
+    "PH_CPI_YOY": (32, 39),   # ~5th of next month
+    "CN_CPI_YOY": (36, 45),   # ~9th-11th of next month
+    "GB_CPI_YOY": (44, 53),   # ~3rd Wednesday of next month
+    "JP_CPI_YOY": (46, 55),   # ~3rd Friday of next month
+    # Money and credit
+    "JP_M2": (36, 43), "JP_LOAN_GROWTH_YOY": (36, 43),            # ~8th-10th of next month
+    "CN_M2": (37, 48), "CN_LOAN_GROWTH_YOY": (37, 48),            # ~10th-15th of next month
+    "EU_M2": (54, 63), "EU_LOAN_GROWTH_YOY": (54, 63),            # ~27th-29th of next month
+    "GB_M2": (56, 64),                                            # ~end of next month
+    "PH_M2": (54, 64), "PH_LOANS_PRIVATE": (54, 64),              # ~end of next month
+    "KR_M2": (68, 82), "KR_LOANS_PRIVATE": (68, 82),              # ~mid month+2
+    # Central bank balance sheets
+    "CN_CB_ASSETS": (48, 66), "KR_CB_ASSETS": (68, 82),
+    # GDP (quarterly; next stamp = 3 months on)
+    "CN_GDP_YOY": (44, 53),   # ~mid month after quarter end
+    "KR_GDP_YOY": (51, 60),   # advance, ~4 weeks after quarter end
+    "EU_GDP_YOY": (57, 65),   # flash, ~30 days after quarter end
+    "PH_GDP_YOY": (63, 72),   # ~5-6 weeks after quarter end
+    "GB_GDP_YOY": (70, 80), "JP_GDP_YOY": (70, 80),               # ~mid second month after quarter end
+}
 
 
-def _in_release_window(sym: str, ours_date: str | None, today: dt.date) -> bool:
+def _in_release_window(sym: str, ours_date: str | None, today: dt.date, cadence: str = "monthly") -> bool:
     win = RELEASE_WINDOW.get(sym)
     if not win or not ours_date:
         return False
-    d = dt.date.fromisoformat(ours_date)
-    next_stamp = (d.replace(day=1) + dt.timedelta(days=32)).replace(day=1)
+    d = dt.date.fromisoformat(ours_date).replace(day=1)
+    months = 3 if cadence == "quarterly" else 1
+    y, m = divmod(d.month - 1 + months, 12)
+    next_stamp = dt.date(d.year + y, m + 1, 1)
     return win[0] <= (today - next_stamp).days <= win[1]
 
 
@@ -119,7 +150,7 @@ def plan() -> int:
         sym = r["symbol"]
         every = CHECK_EVERY_DAYS.get(r.get("cadence") or "unknown", 7)
         last = checked.get(sym, {}).get("at")
-        if r["action"] != "load" and last and not _in_release_window(sym, r.get("ours_date"), today):
+        if r["action"] != "load" and last and not _in_release_window(sym, r.get("ours_date"), today, r.get("cadence") or "monthly"):
             try:
                 if (today - dt.date.fromisoformat(last)).days < every:
                     skipped += 1
