@@ -1,0 +1,23 @@
+{
+  "_note": "Channels scanned by scripts/yt_scan.py. kind decides the window and where results go: live_call -> /cgi-thesis (expires), rule -> /video-to-study backlog, method -> only if usable, background -> monthly skim, dormant -> existence check only. Agreed with Arvin 2026-10-09.",
+  "windows_days": {"live_call": 14, "rule": 3650, "method": 3650, "background": 31, "dormant": 0},
+  "channels": [
+    {"handle": "42Macro", "kind": "live_call"}, {"handle": "Fedguy12", "kind": "live_call"},
+    {"handle": "DoubleLineCapital", "kind": "live_call"}, {"handle": "macrovoices7508", "kind": "live_call"},
+    {"handle": "LukeGromenFFTTLLC", "kind": "live_call"}, {"handle": "MarketsUnscripted", "kind": "live_call"},
+    {"handle": "crowdedmarketreport", "kind": "live_call"}, {"handle": "dens", "kind": "live_call"},
+    {"handle": "morganstanley", "kind": "live_call"}, {"handle": "GoldmanSachs", "kind": "live_call"},
+    {"handle": "jpmorgan", "kind": "live_call"}, {"handle": "federalreserve", "kind": "live_call"},
+    {"handle": "CapitalFlowsResearch", "kind": "live_call"},
+    {"handle": "Trader-Mindset-IVT", "kind": "rule"}, {"handle": "TheOneLanceB", "kind": "rule"},
+    {"handle": "smbcapital", "kind": "rule"}, {"handle": "TheRealMarkMinervini", "kind": "rule"},
+    {"handle": "JLawStock2", "kind": "rule"}, {"handle": "AswathDamodaranonValuation", "kind": "rule"},
+    {"handle": "acrossthespreadYT", "kind": "rule"},
+    {"handle": "3blue1brown", "kind": "method"}, {"handle": "the-synthetic-mind", "kind": "method"},
+    {"handle": "oaktreecapital", "kind": "background"}, {"handle": "PBoyle", "kind": "background"},
+    {"handle": "allin", "kind": "background"}, {"handle": "alixpasquet9198", "kind": "background"},
+    {"handle": "AdamKhoo", "kind": "background"}, {"handle": "McKinsey", "kind": "background"},
+    {"handle": "Qullamaggie", "kind": "dormant"}, {"handle": "LynAldenMedia", "kind": "dormant"},
+    {"handle": "crossbordercapital3019", "kind": "dormant"}
+  ]
+}
