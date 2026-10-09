@@ -6,7 +6,7 @@ brief_data.py -- everything the daily brief needs that does not need a connector
 Writes one JSON with:
   themes       full /api/themes rows (stage, onset, age, runway, RS, price, legs running x/y), megatrend first
   idle         themes with no active run
-  watch        idle themes whose best leg is within 3% of its 200d RS trend, or crossed above it in the last
+  watch        idle themes (with gain_vs_spy_to_cross_pct: how much the leg must beat SPY to cross its trend) whose best leg is within 3% of its 200d RS trend, or crossed above it in the last
                20 days, or sits in this week's RS top 10 -- candidates BEFORE onset ("watch, not a signal")
   rs_week      rs_week.py output (5d vs SPY, 20d beside it)
   holdings     top-N holdings per theme in force (from the running legs, via api/etf_holdings.py), for the
@@ -41,7 +41,10 @@ def main() -> int:
     themes = th["themes"]
     running = [t for t in themes if t.get("n_running")]
     idle = [t for t in themes if not t.get("n_running")]
-    running.sort(key=lambda t: (t.get("class") != "megatrend", t.get("onset") or ""))
+    # megatrends oldest first; rotations youngest first (early runs are the ones to watch)
+    mega = sorted([t for t in running if t.get("class") == "megatrend"], key=lambda t: t.get("onset") or "")
+    rot = sorted([t for t in running if t.get("class") != "megatrend"], key=lambda t: t.get("age_days") or 0)
+    running = mega + rot
 
     tmp = os.path.join(tempfile.mkdtemp(), "rs.json")
     subprocess.run([sys.executable, os.path.join(os.path.dirname(__file__), "rs_week.py"), "--json", tmp,
@@ -65,7 +68,9 @@ def main() -> int:
         if hot:
             why.append("top-10 week: " + " ".join(hot))
         if why:
+            need = round((1 / (1 + gap / 100) - 1) * 100, 1) if gap is not None else None
             watch.append({"theme": t["theme"], "best_leg": best["symbol"], "rs_vs_trend_pct": gap,
+                          "gain_vs_spy_to_cross_pct": need,
                           "last_above": la, "why": "; ".join(why)})
     watch.sort(key=lambda w: -(w["rs_vs_trend_pct"] or -99))
 
