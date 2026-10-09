@@ -9,6 +9,7 @@ The model then reads only the top few transcripts (/video-to-study scan mode).
 
   python3 scripts/yt_scan.py                 # all kinds, shortlist to stdout, marks shortlisted videos seen
   python3 scripts/yt_scan.py --kind live_call --top 5
+  python3 scripts/yt_scan.py --due --top 5      # scheduled run: live calls Mon/Thu, rules Sat, background monthly
   python3 scripts/yt_scan.py --channels 42Macro,MarketsUnscripted --dry-run   # test; does not mark seen
 
 Needs youtube-transcript-api: it re-runs itself inside ~/.cgi/ytvenv if that exists (create with
@@ -91,28 +92,64 @@ def universe() -> set[str]:
         return set()
 
 
-def score(text: str, tickers: set[str]) -> dict:
-    words = re.findall(r"\b[A-Z]{3,6}\b", text)
-    hits = sorted({w for w in words if w in tickers})
+def watch_symbols() -> set[str]:
+    """Arvin's TradingView watchlist symbols, saved locally by the /video-to-study scan step
+    (~/.cgi/yt_watch_symbols.json: a list of tickers). Kept out of the repo: personal lists, public repo."""
+    p = STATE / "yt_watch_symbols.json"
+    try:
+        return {s.split(":")[-1] for s in json.loads(p.read_text()) if not str(s).startswith("###")}
+    except Exception:
+        return set()
+
+
+def due_kinds(today: dt.date) -> list[str]:
+    """Schedule: live calls Mon+Thu, rules/methods Sat, background + dormant check on the first Sat of the month."""
+    k = []
+    if today.weekday() in (0, 3):
+        k.append("live_call")
+    if today.weekday() == 5:
+        k += ["rule", "method"]
+        if today.day <= 7:
+            k += ["background", "dormant"]
+    return k
+
+
+def score(text: str, tickers: set[str], watch: set[str] = frozenset()) -> dict:
+    words = re.findall(r"\b[A-Z]{2,6}\b", text)
+    hits = sorted({w for w in words if w in tickers and len(w) >= 3})
+    whits = sorted({w for w in words if w in watch})
     return {"rule_phrases": len(RULE.findall(text)), "macro_terms": len(MACRO.findall(text)),
-            "tickers": hits[:15], "chars": len(text)}
+            "tickers": hits[:15], "watch_hits": whits[:15], "chars": len(text)}
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--kind"); ap.add_argument("--channels"); ap.add_argument("--top", type=int, default=8)
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--due", action="store_true", help="scan only the kinds scheduled for today")
     a = ap.parse_args()
     cfg = json.loads((ROOT / "config" / "yt_sources.json").read_text())
     STATE.mkdir(exist_ok=True)
     seen_p, ids_p = STATE / "yt_seen.json", STATE / "yt_channel_ids.json"
     seen = set(json.loads(seen_p.read_text())) if seen_p.exists() else set()
     ids = json.loads(ids_p.read_text()) if ids_p.exists() else {}
-    tickers, today = universe(), dt.date.today()
-    chans = [c for c in cfg["channels"] if c["kind"] != "dormant"
-             and (not a.kind or c["kind"] == a.kind) and (not a.channels or c["handle"] in a.channels.split(","))]
-    rows, problems = [], []
+    tickers, watch, today = universe(), watch_symbols(), dt.date.today()
+    kinds = due_kinds(today) if a.due else ([a.kind] if a.kind else None)
+    if a.due and not kinds:
+        print(json.dumps({"due": [], "note": f"nothing scheduled on {today:%A}"})); return 0
+    chans = [c for c in cfg["channels"] if (kinds is None and c["kind"] != "dormant") or (kinds and c["kind"] in kinds)]
+    chans = [c for c in chans if not a.channels or c["handle"] in a.channels.split(",")]
+    rows, problems, revived = [], [], []
     for c in chans:
+        if c["kind"] == "dormant":   # existence check only: has it posted in the last 31 days?
+            cid = channel_id(c["handle"], ids)
+            try:
+                v = uploads(cid)[:1] if cid else []
+            except Exception:
+                v = []
+            if v and (today - dt.date.fromisoformat(v[0]["published"])).days <= 31:
+                revived.append(f"{c['handle']}: posted {v[0]['published']} - {v[0]['title']}")
+            continue
         cid = channel_id(c["handle"], ids)
         if not cid:
             problems.append(f"{c['handle']}: channel id not found"); continue
@@ -126,8 +163,9 @@ def main() -> int:
             if age > win or v["id"] in seen:
                 continue
             t = transcript(v["id"])
-            s = score(t, tickers) if t else {"rule_phrases": 0, "macro_terms": 0, "tickers": [], "chars": 0}
-            pts = s["rule_phrases"] * 3 + min(s["macro_terms"], 40) + 2 * len(s["tickers"]) if t else -1
+            s = score(t, tickers, watch) if t else {"rule_phrases": 0, "macro_terms": 0, "tickers": [], "watch_hits": [], "chars": 0}
+            pts = (s["rule_phrases"] * 3 + min(s["macro_terms"], 40) + 2 * len(s["tickers"])
+                   + 4 * len(s["watch_hits"])) if t else -1
             rows.append({**v, "channel": c["handle"], "kind": c["kind"], "age_days": age,
                          "has_transcript": bool(t), "score": pts, **s})
     rows.sort(key=lambda r: (-r["score"], r["age_days"]))
@@ -136,7 +174,8 @@ def main() -> int:
     if not a.dry_run:
         seen |= {r["id"] for r in short}
         seen_p.write_text(json.dumps(sorted(seen)))
-    print(json.dumps({"scanned_channels": len(chans), "new_videos": len(rows),
+    print(json.dumps({"due": kinds, "watch_symbols": len(watch), "dormant_revived": revived,
+                      "scanned_channels": len(chans), "new_videos": len(rows),
                       "no_transcript": [f"{r['channel']}: {r['title']} ({LAST_ERR.get(r['id'], '?')})" for r in rows if not r["has_transcript"]][:20],
                       "problems": problems, "shortlist": short}, indent=1))
     return 0
