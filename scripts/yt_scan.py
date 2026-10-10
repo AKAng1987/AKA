@@ -17,7 +17,7 @@ Needs youtube-transcript-api: it re-runs itself inside ~/.cgi/ytvenv if that exi
 """
 from __future__ import annotations
 
-import argparse, datetime as dt, json, os, pathlib, re, sys, urllib.request, xml.etree.ElementTree as ET
+import argparse, datetime as dt, json, os, pathlib, re, sys, time, urllib.error, urllib.request, xml.etree.ElementTree as ET
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 STATE = pathlib.Path.home() / ".cgi"
@@ -35,9 +35,21 @@ MACRO = re.compile(r"\b(CPI|PCE|GDP|payrolls?|FOMC|the Fed|yields?|treasur(y|ies
                    r"oil|gold|copper|recession|inflation|rate (cut|hike)s?|curve|QT|QE|SLOOS|ISM|unemployment)\b", re.I)
 
 
-def _get(url: str, timeout: int = 30) -> str:
-    with urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=timeout) as r:
-        return r.read().decode("utf-8", "ignore")
+def _get(url: str, timeout: int = 30, tries: int = 3) -> str:
+    """YouTube throttles bursts (2026-10-10: 8 of 9 feeds failed in one scan), so retry with back-off."""
+    last: Exception | None = None
+    for i in range(tries):
+        try:
+            with urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=timeout) as r:
+                return r.read().decode("utf-8", "ignore")
+        except urllib.error.HTTPError as exc:
+            last = exc
+            if exc.code not in (429, 500, 502, 503, 504):
+                break                       # 404 and the like will not improve by waiting
+        except Exception as exc:  # noqa: BLE001 -- timeouts, resets
+            last = exc
+        time.sleep(4 * (i + 1))
+    raise last
 
 
 def channel_id(handle: str, cache: dict) -> str | None:
@@ -150,13 +162,14 @@ def main() -> int:
             if v and (today - dt.date.fromisoformat(v[0]["published"])).days <= 31:
                 revived.append(f"{c['handle']}: posted {v[0]['published']} - {v[0]['title']}")
             continue
+        time.sleep(1.5)                     # pace the channels; bursts are what get throttled
         cid = channel_id(c["handle"], ids)
         if not cid:
             problems.append(f"{c['handle']}: channel id not found"); continue
         try:
             vids = uploads(cid)
         except Exception as exc:
-            problems.append(f"{c['handle']}: feed error {type(exc).__name__}"); continue
+            problems.append(f"{c['handle']}: feed error {type(exc).__name__} {getattr(exc, 'code', '')}".strip()); continue
         win = cfg["windows_days"][c["kind"]]
         for v in vids:
             age = (today - dt.date.fromisoformat(v["published"])).days
