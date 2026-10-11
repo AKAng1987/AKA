@@ -9,7 +9,7 @@ The model then reads only the top few transcripts (/video-to-study scan mode).
 
   python3 scripts/yt_scan.py                 # all kinds, shortlist to stdout, marks shortlisted videos seen
   python3 scripts/yt_scan.py --kind live_call --top 5
-  python3 scripts/yt_scan.py --due --top 5      # scheduled run: live calls Mon/Thu, rules Sat, background monthly
+  python3 scripts/yt_scan.py --due --top 5      # scheduled run: live calls daily, rules Sat, background monthly
   python3 scripts/yt_scan.py --channels 42Macro,MarketsUnscripted --dry-run   # test; does not mark seen
 
 Needs youtube-transcript-api: it re-runs itself inside ~/.cgi/ytvenv if that exists (create with
@@ -188,10 +188,8 @@ def watch_symbols() -> set[str]:
 
 
 def due_kinds(today: dt.date) -> list[str]:
-    """Schedule: live calls Mon+Thu, rules/methods Sat, background + dormant check on the first Sat of the month."""
-    k = []
-    if today.weekday() in (0, 3):
-        k.append("live_call")
+    """Schedule: live calls daily, rules/methods Sat, background + dormant check on the first Sat of the month."""
+    k = ["live_call"]
     if today.weekday() == 5:
         k += ["rule", "method"]
         if today.day <= 7:
