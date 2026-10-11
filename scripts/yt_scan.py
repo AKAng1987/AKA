@@ -17,6 +17,7 @@ Needs youtube-transcript-api: it re-runs itself inside ~/.cgi/ytvenv if that exi
 """
 from __future__ import annotations
 
+from itertools import zip_longest
 import argparse, datetime as dt, json, os, pathlib, re, sys, time, urllib.error, urllib.request, xml.etree.ElementTree as ET
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -75,12 +76,81 @@ def uploads(cid: str) -> list[dict]:
     return out
 
 
+def _rel_days(text: str) -> int:
+    """'4h ago' -> 0, '7d ago' -> 7, '2w ago' -> 14, '3mo ago' -> 90. Approximate by design."""
+    m = re.match(r"\s*(?:Streamed\s+)?(\d+)\s*(h|d|w|mo|y)", text or "")
+    if not m:
+        return 0
+    n, u = int(m.group(1)), m.group(2)
+    return {"h": 0, "d": n, "w": 7 * n, "mo": 30 * n, "y": 365 * n}[u]
+
+
+def _walk(o):
+    if isinstance(o, dict):
+        if "lockupViewModel" in o:
+            yield o["lockupViewModel"]
+        for v in o.values():
+            yield from _walk(v)
+    elif isinstance(o, list):
+        for v in o:
+            yield from _walk(v)
+
+
+def uploads_page(handle: str, today: dt.date | None = None) -> list[dict]:
+    """Fallback when the RSS feed is down (it returned 404 for every channel on 2026-10-11): read the channel's
+    Videos page, whose embedded data lists recent uploads with a relative age ('7d ago'). Dates are approximate,
+    which is enough for a 14-day window. Layout-dependent, so an empty result is reported as an error, not as 'no videos'."""
+    today = today or dt.date.today()
+    html = _get(f"https://www.youtube.com/@{handle}/videos")
+    m = re.search(r"var ytInitialData = (\{.*?\});</script>", html, re.S)
+    if not m:
+        raise RuntimeError("page has no embedded data")
+    out, seen = [], set()
+    for lv in _walk(json.loads(m.group(1))):
+        vid = lv.get("contentId")
+        if not vid or len(vid) != 11 or vid in seen:
+            continue
+        seen.add(vid)
+        md = lv.get("metadata", {}).get("lockupMetadataViewModel", {})
+        parts = [p.get("text", {}).get("content", "")
+                 for row in md.get("metadata", {}).get("contentMetadataViewModel", {}).get("metadataRows", [])
+                 for p in row.get("metadataParts", [])]
+        age = next((x for x in parts if re.search(r"\bago\b", x)), "")
+        out.append({"id": vid, "title": md.get("title", {}).get("content", "?"),
+                    "published": (today - dt.timedelta(days=_rel_days(age))).isoformat(),
+                    "url": f"https://www.youtube.com/watch?v={vid}", "approx_date": True})
+    if not out:
+        raise RuntimeError("page layout not recognised (no videos found)")
+    return out
+
+
+def fetch_uploads(handle: str, cid: str | None) -> list[dict]:
+    """RSS first; if it fails for any reason, the channel page."""
+    try:
+        if not cid:
+            raise RuntimeError("no channel id")
+        return uploads(cid)
+    except Exception as feed_exc:  # noqa: BLE001
+        try:
+            return uploads_page(handle)
+        except Exception as page_exc:  # noqa: BLE001
+            raise RuntimeError(f"feed {getattr(feed_exc, 'code', type(feed_exc).__name__)}; page {page_exc}") from page_exc
+
+
 LAST_ERR: dict[str, str] = {}
 
 
+BLOCKED = {"hit": False}
+BLOCK_ERRS = ("IpBlocked", "RequestBlocked", "TooManyRequests")
+
+
 def transcript(vid: str) -> str | None:
-    """YouTube throttles quick successive transcript requests, so pace them and retry once."""
+    """YouTube throttles quick successive transcript requests, so pace them and retry once.
+    If it says the IP is blocked, stop asking for the rest of the run: more requests only extend the block."""
     import time
+    if BLOCKED["hit"]:
+        LAST_ERR[vid] = "not tried: YouTube is blocking transcript requests from this IP"
+        return None
     try:
         from youtube_transcript_api import YouTubeTranscriptApi
     except ImportError:
@@ -92,6 +162,9 @@ def transcript(vid: str) -> str | None:
             return " ".join(s.text for s in YouTubeTranscriptApi().fetch(vid))
         except Exception as exc:
             LAST_ERR[vid] = type(exc).__name__
+            if type(exc).__name__ in BLOCK_ERRS:
+                BLOCKED["hit"] = True
+                return None
     return None
 
 
@@ -139,6 +212,7 @@ def main() -> int:
     ap.add_argument("--kind"); ap.add_argument("--channels"); ap.add_argument("--top", type=int, default=8)
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--due", action="store_true", help="scan only the kinds scheduled for today")
+    ap.add_argument("--max-transcripts", type=int, default=20, help="most transcripts to fetch in one run (newest first, channels in rotation)")
     a = ap.parse_args()
     cfg = json.loads((ROOT / "config" / "yt_sources.json").read_text())
     STATE.mkdir(exist_ok=True)
@@ -151,12 +225,12 @@ def main() -> int:
         print(json.dumps({"due": [], "note": f"nothing scheduled on {today:%A}"})); return 0
     chans = [c for c in cfg["channels"] if (kinds is None and c["kind"] != "dormant") or (kinds and c["kind"] in kinds)]
     chans = [c for c in chans if not a.channels or c["handle"] in a.channels.split(",")]
-    rows, problems, revived = [], [], []
+    rows, problems, revived, cands = [], [], [], []
     for c in chans:
         if c["kind"] == "dormant":   # existence check only: has it posted in the last 31 days?
             cid = channel_id(c["handle"], ids)
             try:
-                v = uploads(cid)[:1] if cid else []
+                v = fetch_uploads(c["handle"], cid)[:1]
             except Exception:
                 v = []
             if v and (today - dt.date.fromisoformat(v[0]["published"])).days <= 31:
@@ -164,23 +238,30 @@ def main() -> int:
             continue
         time.sleep(1.5)                     # pace the channels; bursts are what get throttled
         cid = channel_id(c["handle"], ids)
-        if not cid:
-            problems.append(f"{c['handle']}: channel id not found"); continue
         try:
-            vids = uploads(cid)
+            vids = fetch_uploads(c["handle"], cid)
         except Exception as exc:
-            problems.append(f"{c['handle']}: feed error {type(exc).__name__} {getattr(exc, 'code', '')}".strip()); continue
+            problems.append(f"{c['handle']}: {exc}"); continue
         win = cfg["windows_days"][c["kind"]]
         for v in vids:
             age = (today - dt.date.fromisoformat(v["published"])).days
             if age > win or v["id"] in seen:
                 continue
-            t = transcript(v["id"])
-            s = score(t, tickers, watch) if t else {"rule_phrases": 0, "macro_terms": 0, "tickers": [], "watch_hits": [], "chars": 0}
-            pts = (s["rule_phrases"] * 3 + min(s["macro_terms"], 40) + 2 * len(s["tickers"])
-                   + 4 * len(s["watch_hits"])) if t else -1
-            rows.append({**v, "channel": c["handle"], "kind": c["kind"], "age_days": age,
-                         "has_transcript": bool(t), "score": pts, **s})
+            cands.append({**v, "channel": c["handle"], "kind": c["kind"], "age_days": age})
+    # newest first within a channel, channels in rotation, so a prolific channel cannot use up the whole budget
+    by_chan: dict[str, list[dict]] = {}
+    for v in sorted(cands, key=lambda x: x["age_days"]):
+        by_chan.setdefault(v["channel"], []).append(v)
+    order = [v for tier in zip_longest(*by_chan.values()) for v in tier if v]
+    unread = []
+    for k, v in enumerate(order):
+        if k >= a.max_transcripts:
+            unread.append(v); continue
+        t = transcript(v["id"])
+        s = score(t, tickers, watch) if t else {"rule_phrases": 0, "macro_terms": 0, "tickers": [], "watch_hits": [], "chars": 0}
+        pts = (s["rule_phrases"] * 3 + min(s["macro_terms"], 40) + 2 * len(s["tickers"])
+               + 4 * len(s["watch_hits"])) if t else -1
+        rows.append({**v, "has_transcript": bool(t), "score": pts, **s})
     rows.sort(key=lambda r: (-r["score"], r["age_days"]))
     short = [r for r in rows if r["has_transcript"]][: a.top]
     ids_p.write_text(json.dumps(ids, indent=1))
@@ -188,7 +269,8 @@ def main() -> int:
         seen |= {r["id"] for r in short}
         seen_p.write_text(json.dumps(sorted(seen)))
     print(json.dumps({"due": kinds, "watch_symbols": len(watch), "dormant_revived": revived,
-                      "scanned_channels": len(chans), "new_videos": len(rows),
+                      "scanned_channels": len(chans), "new_videos": len(order), "transcripts_blocked": BLOCKED["hit"],
+                      "not_read_over_cap": [f"{v['channel']}: {v['title']} ({v['published']})" for v in unread][:30],
                       "no_transcript": [f"{r['channel']}: {r['title']} ({LAST_ERR.get(r['id'], '?')})" for r in rows if not r["has_transcript"]][:20],
                       "problems": problems, "shortlist": short}, indent=1))
     return 0
