@@ -81,7 +81,9 @@ def _post(path: str, body: dict) -> dict:
 # checked once a month like any other monthly series.
 #
 # That is the difference between ~56 fetches a day and ~12.
-CHECK_EVERY_DAYS = {"daily": 1, "weekly": 7, "monthly": 31,
+# Weekly was 7: a weekly bar that was still forming when we asked (Fri) was recorded as "asked", so the next ask came a
+# week later and the PH yields sat 2 weeks behind (2026-10-13). Weekly series are 5 cheap fetches; ask every other day.
+CHECK_EVERY_DAYS = {"daily": 1, "weekly": 2, "monthly": 31,
                     "quarterly": 92, "annual": 366, "unknown": 7}
 
 # ...but "once a month since we last asked" can miss a print by a whole month: ISM services was asked on
