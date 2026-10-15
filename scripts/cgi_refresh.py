@@ -187,6 +187,25 @@ def _trade_date(t: int) -> str:
     return dt.datetime.fromtimestamp(int(t) + 8 * 3600, ZoneInfo("America/New_York")).date().isoformat()
 
 
+def futures_rows(bars: list, now_et: dt.datetime) -> list[list]:
+    """Finished futures days from TradingView's RAW bars [[t, close], ...] (t exactly as returned).
+
+    TradingView stamps a futures bar at its session OPEN (18:00 ET the evening before), so the trading date is the New
+    York date 8 hours later (_trade_date). A trading date D is final from 17:00 ET on D itself; the bar still forming at
+    run time has a LATER trading date and must never be stored as a close. Weekend dates are dropped."""
+    final = now_et.date() if (now_et.hour, now_et.minute) >= (17, 30) else now_et.date() - dt.timedelta(days=1)
+    out: dict[str, float] = {}
+    for b in bars:
+        try:
+            d = _trade_date(b[0])
+            v = float(b[1])
+        except (TypeError, ValueError, IndexError):
+            continue
+        if dt.date.fromisoformat(d) <= final and dt.date.fromisoformat(d).weekday() < 5:
+            out[d] = v
+    return sorted([d, v] for d, v in out.items())
+
+
 def referee_plan() -> int:
     print(json.dumps({"fetch_with": "mcp-tv-get-ohlcv interval=1D count=5",
                       "send_in_apply_as": '"_referee": {SYMBOL: [[t, c], ...]}',
@@ -210,6 +229,14 @@ def apply_() -> int:
                 referee[sym] = [[_trade_date(b[0]), float(b[1])] for b in bars[-5:]]
             except (TypeError, ValueError, IndexError):
                 print(f"referee: could not read bars for {sym}", file=sys.stderr)
+
+    # Futures arrive as raw bars under "_futures" and are dated here, never by the model: see futures_rows().
+    from zoneinfo import ZoneInfo
+    now_et = dt.datetime.now(ZoneInfo("America/New_York"))
+    for sym, bars in (fetched.pop("_futures", None) or {}).items():
+        rows_f = futures_rows(bars, now_et) if isinstance(bars, list) else []
+        if rows_f:
+            fetched[sym] = rows_f
 
     held = {r["symbol"]: r["ours_date"]
             for r in _get("/api/freshness")["manual"]["series"]}
