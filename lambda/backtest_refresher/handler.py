@@ -266,6 +266,11 @@ def _fetch_price_history(symbol: str) -> list[dict]:
             high = item.get("high", {}).get("N", close)
             low = item.get("low", {}).get("N", close)
             c, h, l = float(close), float(high), float(low)
+            if c <= 0:
+                # A zero close is a bad bar, not a price (the same rule themes_data._load applies). marketstack stored
+                # 0 for ~30 ETFs on 4, 9, 10 and 15 Jun 2026; one such bar made every episode spanning it show a
+                # "-100%" low and wrecked the C3xG1 rows. An EMPTY close was already skipped above.
+                continue
             # Is this bar's OHLC on the same scale as its close?
             #
             # For 44 of 167 tickers it is not. `close` is the ADJUSTED close
