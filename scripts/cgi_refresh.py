@@ -93,7 +93,7 @@ CHECK_EVERY_DAYS = {"daily": 1, "weekly": 2, "monthly": 31,
 #
 # Windows are (first, last) days after the NEXT period's stamp date (a September print is stamped 2026-09-01),
 # taken from each source's usual schedule with a few days' margin either side. Policy rates move only at
-# meetings and are left to the backstop.
+# meetings, so they are asked weekly (see plan()) instead of waiting for the monthly backstop.
 RELEASE_WINDOW = {
     # US surveys
     "ISM_MFG_PMI": (29, 36), "ISM_MFG_PRICES": (29, 36),          # 1st business day of next month
@@ -143,15 +143,101 @@ def _state() -> dict:
         return {}
 
 
+# ── Release calendar (rates, inflation, GDP for the Countries page countries) ───────────────────────────────────────
+# TradingView's economic calendar looks ~31 days ahead and carries the ticker of every series it releases. Once a week the
+# routine reads it and posts compact rows to /api/country_calendar (the API classifies and validates). plan() then uses the
+# stored rows: a series whose release has PASSED and is not loaded is due now; one whose next release is still ahead is left
+# alone until then. Series the calendar does not list keep the old cadence rules and RELEASE_WINDOW. Found 2026-10-27: PH's
+# policy rate sat at 5.0% for 5 days after the 22 Oct hike because it was only asked monthly.
+CAL_COUNTRIES = "PH,CN,JP,KR,GB,EU,IN,ID,TW,HK,SG,MY,VN,AU,CA,CH,BR,MX,ZA"
+CAL_REFRESH_DAYS = 6
+CAL_ROW = "[country, date, title, indicator, category, period, previous, forecast, importance, ticker]"
+
+
+def _period_stamp(kind: str, release: dt.date) -> str:
+    """Date stamp the stored series should reach once this release is loaded. Keep in step with
+    api/country_calendar._period_stamp (a test compares them)."""
+    if kind == "rate":
+        return release.replace(day=1).isoformat()
+    if kind == "gdp":
+        ends = [m for m in (3, 6, 9, 12) if m < release.month]
+        return (dt.date(release.year, ends[-1], 1) if ends else dt.date(release.year - 1, 12, 1)).isoformat()
+    return (release.replace(day=1) - dt.timedelta(days=1)).replace(day=1).isoformat()
+
+
+def _calendar() -> dict:
+    try:
+        return _get("/api/country_calendar")
+    except Exception:  # noqa: BLE001 -- no calendar means the old rules apply, which is safe
+        return {"at": None, "rows": []}
+
+
+def calendar_due(cal: dict, today: dt.date) -> bool:
+    at = cal.get("at")
+    if not at:
+        return True
+    try:
+        return (today - dt.date.fromisoformat(at[:10])).days >= CAL_REFRESH_DAYS
+    except ValueError:
+        return True
+
+
+def calendar_say(sym: str, ours: str | None, cal_rows: list[dict], today: dt.date) -> tuple[str, str] | None:
+    """('due', why) when a release for this series has passed and is not loaded; ('wait', why) when its next release is
+    still ahead and nothing passed is outstanding; None when the calendar says nothing about the series."""
+    evs = [r for r in cal_rows if r.get("series") == sym]
+    if not evs:
+        return None
+    due = []
+    for r in evs:
+        try:
+            d = dt.date.fromisoformat(r["date"])
+        except (KeyError, ValueError):
+            continue
+        # forced for 10 days after the release only: a source that never posts the print must not be asked daily forever
+        if d <= today and (today - d).days <= 10 and (ours is None or ours < _period_stamp(r.get("kind", ""), d)):
+            due.append((d, r))
+    if due:
+        d, r = max(due, key=lambda x: x[0])
+        return "due", f"released {d.isoformat()} ({r.get('title', '')[:40]}), we hold {ours}"
+    nxt = sorted(r["date"] for r in evs if r.get("date", "") > today.isoformat())
+    return ("wait", f"next release {nxt[0]}") if nxt else None
+
+
+def calendar_plan() -> int:
+    cal, today = _calendar(), dt.date.today()
+    print(json.dumps({"calendar_stored_at": cal.get("at"), "rows_stored": len(cal.get("rows", [])), "fetch_now": calendar_due(cal, today),
+                      "fetch_with": "mcp-tv-get-economic-calendar", "countries": CAL_COUNTRIES,
+                      "date_from": today.isoformat(), "date_to": (today + dt.timedelta(days=31)).isoformat(), "min_importance": 0,
+                      "send_in_apply_as": f'"_calendar": [{CAL_ROW}, ...]  # one row per event, fields copied exactly, no filtering: the API classifies',
+                      "note": "TradingView lags official releases; the window is ~31 days; do not invent rows."}, indent=1))
+    return 0
+
+
 def plan() -> int:
     """What to fetch. Everything else the model would have had to work out."""
     f = _get("/api/freshness")
     checked = _state()
+    cal = _calendar()
     today = dt.date.today()
     out, skipped = [], 0
     for r in f["manual"]["series"]:
         sym = r["symbol"]
+        said = calendar_say(sym, r.get("ours_date"), cal.get("rows", []), today)
+        weekly_ok = sym.endswith("_POLICY_RATE") and checked.get(sym, {}).get("at") and \
+            (today - dt.date.fromisoformat(checked[sym]["at"])).days < 7
+        if said and said[0] == "due":
+            if checked.get(sym, {}).get("at") == today.isoformat():
+                skipped += 1            # already asked today and the source did not have it yet
+                continue
+            out.append({"symbol": sym, "fetch": r["source_symbol"], "we_hold": r["ours_date"], "cadence": r["cadence"], "why": said[1]})
+            continue
+        if said and said[0] == "wait" and (weekly_ok or not sym.endswith("_POLICY_RATE")):
+            skipped += 1                # its next release is still ahead; policy rates also get the weekly safety check below
+            continue
         every = CHECK_EVERY_DAYS.get(r.get("cadence") or "unknown", 7)
+        if sym.endswith("_POLICY_RATE"):
+            every = min(every, 7)   # a rate move can land any week; asked monthly, PH sat at 5.0% for 5 days after the 22 Oct hike (found 2026-10-27)
         last = checked.get(sym, {}).get("at")
         if r["action"] != "load" and last and not _in_release_window(sym, r.get("ours_date"), today, r.get("cadence") or "monthly"):
             try:
@@ -222,6 +308,17 @@ def apply_() -> int:
         return 2
 
     raw_ref = fetched.pop("_referee", None) or {}
+    cal_rows = fetched.pop("_calendar", None)
+    cal_note = ""
+    if isinstance(cal_rows, list) and cal_rows:
+        try:
+            res = _post("/api/country_calendar", {"rows": cal_rows})
+            rep = res.get("report", {})
+            cal_note = f"calendar: {rep.get('kept', '?')} of {rep.get('received', '?')} rows kept"
+        except urllib.error.HTTPError as exc:
+            cal_note = f"calendar FAILED: HTTP {exc.code} {exc.read().decode()[:120]}"
+        except Exception as exc:  # noqa: BLE001
+            cal_note = f"calendar FAILED: {type(exc).__name__} {exc}"
     referee = {}
     for sym, bars in raw_ref.items():
         if sym in REFEREE and isinstance(bars, list):
@@ -272,6 +369,8 @@ def apply_() -> int:
                f"{len(failed)} failed")
     if updated:
         summary += " | " + ", ".join(updated[:12])
+    if cal_note:
+        summary += " | " + cal_note
     if failed:
         summary += " | FAILED: " + "; ".join(failed[:5])
 
@@ -397,6 +496,8 @@ if __name__ == "__main__":
         raise SystemExit(referee_plan())
     if cmd == "plan":
         raise SystemExit(plan())
+    if cmd == "calendar":
+        raise SystemExit(calendar_plan())
     if cmd == "apply":
         raise SystemExit(apply_())
     if cmd == "lists":
@@ -407,4 +508,4 @@ if __name__ == "__main__":
             raise SystemExit(lists_done(sys.argv[3:]))
         if sub == "verify":
             raise SystemExit(lists_verify())
-    raise SystemExit("usage: cgi_refresh.py plan | apply | lists plan | lists done ID=HASH... | lists verify")
+    raise SystemExit("usage: cgi_refresh.py plan | calendar | apply | lists plan | lists done ID=HASH... | lists verify")
