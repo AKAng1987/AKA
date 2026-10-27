@@ -52,6 +52,21 @@ class Say(unittest.TestCase):
                 self.assertEqual(r._period_stamp(kind, d), cc._period_stamp({"kind": kind}, d), (kind, d))
 
 
+class Localize(unittest.TestCase):
+    def test_tokyo_release_after_15_utc_is_the_next_local_day(self):
+        self.assertEqual(r.localize_calendar_row(["JP", "2026-11-15T23:50:00.000Z", "GDP"])[1], "2026-11-16")
+
+    def test_manila_morning_release_keeps_its_day(self):
+        self.assertEqual(r.localize_calendar_row(["PH", "2026-11-09T01:00:00.000Z", "GDP"])[1], "2026-11-09")
+
+    def test_date_only_and_garbage_pass_through(self):
+        self.assertEqual(r.localize_calendar_row(["PH", "2026-11-09", "x"]), ["PH", "2026-11-09", "x"])
+        self.assertEqual(r.localize_calendar_row(["PH"]), ["PH"])
+
+    def test_new_york_style_release_stays_on_its_day(self):
+        self.assertEqual(r.localize_calendar_row(["CA", "2026-10-28T13:45:00.000Z", "BoC"])[1], "2026-10-28")
+
+
 class Plan(unittest.TestCase):
     def run_plan(self, series, cal_rows, checked=None):
         fresh = {"manual": {"series": series}}

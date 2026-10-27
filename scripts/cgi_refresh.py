@@ -165,6 +165,25 @@ def _period_stamp(kind: str, release: dt.date) -> str:
     return (release.replace(day=1) - dt.timedelta(days=1)).replace(day=1).isoformat()
 
 
+# TradingView stamps events in UTC. A release at 23:30 UTC on the 19th is the 20th in Tokyo, so the calendar uses the country's
+# own date (a fixed offset; an hour of daylight-saving error cannot move a release across midnight in practice).
+CAL_UTC_OFFSET = {"PH": 8, "CN": 8, "HK": 8, "SG": 8, "MY": 8, "TW": 8, "JP": 9, "KR": 9, "VN": 7, "ID": 7, "IN": 5.5, "AU": 11,
+                  "GB": 0, "EU": 1, "CH": 1, "ZA": 2, "CA": -4, "MX": -6, "BR": -3}
+
+
+def localize_calendar_row(row: list) -> list:
+    """Row date -> the country's local calendar date (YYYY-MM-DD). A date without a time is left as it is."""
+    try:
+        country, stamp = row[0], str(row[1])
+        if "T" not in stamp:
+            return row
+        utc = dt.datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+        local = utc + dt.timedelta(hours=CAL_UTC_OFFSET.get(country, 0))
+        return [row[0], local.date().isoformat()] + list(row[2:])
+    except (IndexError, ValueError, TypeError):
+        return row
+
+
 def _calendar() -> dict:
     try:
         return _get("/api/country_calendar")
@@ -208,9 +227,9 @@ def calendar_plan() -> int:
     cal, today = _calendar(), dt.date.today()
     print(json.dumps({"calendar_stored_at": cal.get("at"), "rows_stored": len(cal.get("rows", [])), "fetch_now": calendar_due(cal, today),
                       "fetch_with": "mcp-tv-get-economic-calendar", "countries": CAL_COUNTRIES,
-                      "date_from": today.isoformat(), "date_to": (today + dt.timedelta(days=31)).isoformat(), "min_importance": 0,
+                      "date_from": (today - dt.timedelta(days=7)).isoformat(), "date_to": (today + dt.timedelta(days=31)).isoformat(), "min_importance": 0,
                       "send_in_apply_as": f'"_calendar": [{CAL_ROW}, ...]  # one row per event, fields copied exactly, no filtering: the API classifies',
-                      "note": "TradingView lags official releases; the window is ~31 days; do not invent rows."}, indent=1))
+                      "note": "date_from is a week back so a release that just printed can be checked against what CGI holds. TradingView lags official releases; the window is ~31 days; do not invent rows. Large results are saved to a file: build the rows from that file with a script, do not retype them."}, indent=1))
     return 0
 
 
@@ -311,6 +330,7 @@ def apply_() -> int:
     cal_rows = fetched.pop("_calendar", None)
     cal_note = ""
     if isinstance(cal_rows, list) and cal_rows:
+        cal_rows = [localize_calendar_row(r) if isinstance(r, list) else r for r in cal_rows]
         try:
             res = _post("/api/country_calendar", {"rows": cal_rows})
             rep = res.get("report", {})
