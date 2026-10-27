@@ -89,6 +89,15 @@ def main() -> int:
     for s in stalled:
         amber.append(f"stalled {s['symbol']} ({s.get('source')}): newest {s.get('newest')}, {s.get('behind')}")
 
+    cot = f.get("cot")
+    if cot:
+        lines.append(f"cot       CFTC newest {cot.get('source_newest')} (published ~{cot.get('published_est')}), we serve {cot.get('ours_as_of')}"
+                     f", pattern {cot.get('pattern')}, {cot.get('n_problems', 0)} problems")
+        for p in cot.get("problems", []):
+            amber.append(f"COT {p.get('check')}: {p.get('detail')}")
+        if cot.get("error"):
+            amber.append(f"COT check could not run: {cot['error']}")
+
     try:
         behind = tape_behind()
         lines.append(f"tape      {len(behind)} daily rows >1 trading day behind (weekly series excluded)"
