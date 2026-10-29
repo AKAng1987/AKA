@@ -98,6 +98,15 @@ def main() -> int:
         if cot.get("error"):
             amber.append(f"COT check could not run: {cot['error']}")
 
+    capex = f.get("capex")
+    if capex:
+        lines.append(f"capex     snapshot built {capex.get('built_at')}, expects {capex.get('expected_quarter')}"
+                     f" ({capex.get('share_with_expected')} of {capex.get('n_reporters')} reporters have it), {capex.get('n_problems', 0)} problems")
+        for p in capex.get("problems", []):
+            amber.append(f"capex {p.get('check')}: {p.get('detail')}")
+        if capex.get("error"):
+            amber.append(f"capex check could not run: {capex['error']}")
+
     try:
         behind = tape_behind()
         lines.append(f"tape      {len(behind)} daily rows >1 trading day behind (weekly series excluded)"
