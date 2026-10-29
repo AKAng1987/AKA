@@ -7,15 +7,17 @@ Run from ~/cgi-vercel with its venv (the logic lives in api/capex_data.py):
     api/.venv/bin/python ~/market-dashboard/scripts/capex_build.py --from /tmp/capex.json --upload   # store a file you already checked
     api/.venv/bin/python ~/market-dashboard/scripts/capex_build.py --universe                # list the companies, build nothing
 
-Re-run in earnings seasons (late Jan, Apr, Jul, Oct, and again two weeks later for
-late filers). It is safe to run any time: the snapshot is replaced whole, and the
-API reads it with a 24h cache. About 500 SEC requests, paced; roughly 8 minutes.
+Runs weekly, unattended, from launchd (~/Library/LaunchAgents/com.arvin.capex-build.plist, Sunday 09:00 Manila,
+so Monday's page is fresh; a Mac that was asleep runs it on wake). Safe to run any time: the snapshot is replaced
+whole, a build that lost companies is refused, and the API reads it with a 24h cache. About 500 SEC requests,
+paced; roughly 8 minutes. If a week is missed, /api/freshness shows a `capex` problem after 9 days.
 """
 from __future__ import annotations
 
 import argparse
 import json
 import os
+import subprocess
 import sys
 
 API = os.path.expanduser("~/cgi-vercel/api")
@@ -24,13 +26,28 @@ sys.path.insert(0, API)
 import capex_data as cd  # noqa: E402
 
 
+def _fail(msg: str) -> int:
+    """Say it out loud: this runs unattended from launchd, where a silent failure would only show as 'snapshot old'."""
+    print(msg)
+    if a_notify:
+        text = msg[:120].replace('"', "'")
+        subprocess.run(["osascript", "-e", f'display notification "{text}" with title "CGI capex refresh"'], check=False)
+    return 1
+
+
+a_notify = False
+
+
 def main() -> int:
+    global a_notify
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", help="write the snapshot to this local file")
     ap.add_argument("--upload", action="store_true", help="store the snapshot to S3 for the API")
     ap.add_argument("--from", dest="src", help="use this snapshot file instead of building")
+    ap.add_argument("--notify", action="store_true", help="raise a macOS notification on failure (for launchd)")
     ap.add_argument("--universe", action="store_true", help="print the company list and stop")
     a = ap.parse_args()
+    a_notify = a.notify
 
     if a.universe:
         uni = cd.universe()
@@ -54,12 +71,19 @@ def main() -> int:
         print("wrote", a.out)
     if a.upload:
         if n < 300:
-            print(f"refusing to upload: only {n} companies have capex (expect 400+)")
-            return 1
+            return _fail(f"refusing to upload: only {n} companies have capex (expect 400+)")
+        old = cd.read_snapshot()
+        if old:
+            n_old = sum(1 for c in old["companies"] if c["cq"])
+            if n < n_old * 0.95:
+                return _fail(f"refusing to upload: {n} companies with capex, the stored snapshot has {n_old}")
         cd.write_snapshot(snap)
         print("stored to S3:", cd.KEY)
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except Exception as e:  # noqa: BLE001 -- unattended: report any crash, never fail silently
+        sys.exit(_fail(f"capex refresh crashed: {type(e).__name__}: {e}"))
