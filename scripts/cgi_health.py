@@ -117,6 +117,15 @@ def main() -> int:
         if rc.get("error"):
             amber.append(f"release calendar check could not run: {rc['error']}")
 
+    rp = f.get("rate_path")
+    if rp:
+        lines.append(f"ratepath  {rp.get('n_meetings_priced')} FOMC meetings priced, {rp.get('n_sr3_quoted')} SOFR futures quoted, "
+                     f"{rp.get('history_days')} days of snapshots, {rp.get('n_problems', 0)} problems")
+        for p in rp.get("problems", []):
+            amber.append(f"rate path {p.get('check')}: {p.get('detail')}")
+        if rp.get("error"):
+            amber.append(f"rate path check could not run: {rp['error']}")
+
     try:
         behind = tape_behind()
         lines.append(f"tape      {len(behind)} daily rows >1 trading day behind (weekly series excluded)"
