@@ -1,0 +1,224 @@
+[
+ {
+  "source": {
+   "S": "alpha_vantage"
+  },
+  "symbol": {
+   "S": "USDAUD"
+  },
+  "source_symbol": {
+   "S": "AUD"
+  },
+  "frequency": {
+   "S": "1D"
+  }
+ },
+ {
+  "source": {
+   "S": "alpha_vantage"
+  },
+  "source_symbol": {
+   "S": "CHF"
+  },
+  "symbol": {
+   "S": "USDCHF"
+  },
+  "frequency": {
+   "S": "1D"
+  }
+ },
+ {
+  "symbol": {
+   "S": "USDCNY"
+  },
+  "source": {
+   "S": "alpha_vantage"
+  },
+  "source_symbol": {
+   "S": "CNY"
+  },
+  "frequency": {
+   "S": "1D"
+  }
+ },
+ {
+  "source": {
+   "S": "alpha_vantage"
+  },
+  "frequency": {
+   "S": "1D"
+  },
+  "source_symbol": {
+   "S": "EUR"
+  },
+  "symbol": {
+   "S": "USDEUR"
+  }
+ },
+ {
+  "source": {
+   "S": "alpha_vantage"
+  },
+  "source_symbol": {
+   "S": "GBP"
+  },
+  "symbol": {
+   "S": "USDGBP"
+  },
+  "frequency": {
+   "S": "1D"
+  }
+ },
+ {
+  "source": {
+   "S": "alpha_vantage"
+  },
+  "source_symbol": {
+   "S": "HKD"
+  },
+  "symbol": {
+   "S": "USDHKD"
+  },
+  "frequency": {
+   "S": "1D"
+  }
+ },
+ {
+  "source": {
+   "S": "alpha_vantage"
+  },
+  "frequency": {
+   "S": "1D"
+  },
+  "symbol": {
+   "S": "USDIDR"
+  },
+  "source_symbol": {
+   "S": "IDR"
+  },
+  "description": {
+   "S": "currency"
+  }
+ },
+ {
+  "source": {
+   "S": "alpha_vantage"
+  },
+  "symbol": {
+   "S": "USDINR"
+  },
+  "source_symbol": {
+   "S": "INR"
+  },
+  "frequency": {
+   "S": "1D"
+  }
+ },
+ {
+  "source": {
+   "S": "alpha_vantage"
+  },
+  "frequency": {
+   "S": "1D"
+  },
+  "symbol": {
+   "S": "USDJPY"
+  },
+  "source_symbol": {
+   "S": "JPY"
+  }
+ },
+ {
+  "source": {
+   "S": "alpha_vantage"
+  },
+  "source_symbol": {
+   "S": "KRW"
+  },
+  "frequency": {
+   "S": "1D"
+  },
+  "symbol": {
+   "S": "USDKRW"
+  }
+ },
+ {
+  "source": {
+   "S": "alpha_vantage"
+  },
+  "description": {
+   "S": "currency"
+  },
+  "source_symbol": {
+   "S": "PHP"
+  },
+  "symbol": {
+   "S": "USDPHP"
+  },
+  "frequency": {
+   "S": "1D"
+  }
+ },
+ {
+  "source": {
+   "S": "alpha_vantage"
+  },
+  "source_symbol": {
+   "S": "RUB"
+  },
+  "symbol": {
+   "S": "USDRUB"
+  },
+  "description": {
+   "S": "currency"
+  },
+  "frequency": {
+   "S": "1D"
+  }
+ },
+ {
+  "source": {
+   "S": "alpha_vantage"
+  },
+  "source_symbol": {
+   "S": "SGD"
+  },
+  "frequency": {
+   "S": "1D"
+  },
+  "symbol": {
+   "S": "USDSGD"
+  }
+ },
+ {
+  "source": {
+   "S": "alpha_vantage"
+  },
+  "source_symbol": {
+   "S": "THB"
+  },
+  "symbol": {
+   "S": "USDTHB"
+  },
+  "frequency": {
+   "S": "1D"
+  }
+ },
+ {
+  "source": {
+   "S": "alpha_vantage"
+  },
+  "frequency": {
+   "S": "1D"
+  },
+  "source_symbol": {
+   "S": "TRY"
+  },
+  "description": {
+   "S": "currency"
+  },
+  "symbol": {
+   "S": "USDTRY"
+  }
+ }
+]
