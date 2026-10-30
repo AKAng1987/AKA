@@ -52,6 +52,22 @@ class Say(unittest.TestCase):
                 self.assertEqual(r._period_stamp(kind, d), cc._period_stamp({"kind": kind}, d), (kind, d))
 
 
+class UsConsensusDue(unittest.TestCase):
+    def test_outstanding_us_forecast_forces_a_fetch_even_with_a_fresh_calendar(self):
+        today = dt.date(2026, 11, 8)
+        fresh = {"at": "2026-11-07T00:00:00+00:00", "rows": [], "us_forecast_missing": ["2026-11-10"]}
+        self.assertTrue(r.calendar_due(fresh, today))
+
+    def test_nothing_outstanding_keeps_the_six_day_cadence(self):
+        today = dt.date(2026, 11, 8)
+        self.assertFalse(r.calendar_due({"at": "2026-11-07T00:00:00+00:00", "rows": [], "us_forecast_missing": []}, today))
+
+    def test_us_is_in_the_country_list_and_has_an_offset(self):
+        self.assertIn("US", r.CAL_COUNTRIES.split(","))
+        self.assertIn("US", r.CAL_UTC_OFFSET)
+        self.assertTrue(r.CAL_ROW.rstrip("]").endswith("actual"))
+
+
 class Localize(unittest.TestCase):
     def test_tokyo_release_after_15_utc_is_the_next_local_day(self):
         self.assertEqual(r.localize_calendar_row(["JP", "2026-11-15T23:50:00.000Z", "GDP"])[1], "2026-11-16")

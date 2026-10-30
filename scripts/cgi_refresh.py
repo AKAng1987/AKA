@@ -149,9 +149,9 @@ def _state() -> dict:
 # stored rows: a series whose release has PASSED and is not loaded is due now; one whose next release is still ahead is left
 # alone until then. Series the calendar does not list keep the old cadence rules and RELEASE_WINDOW. Found 2026-10-27: PH's
 # policy rate sat at 5.0% for 5 days after the 22 Oct hike because it was only asked monthly.
-CAL_COUNTRIES = "PH,CN,JP,KR,GB,EU,IN,ID,TW,HK,SG,MY,VN,AU,CA,CH,BR,MX,ZA"
+CAL_COUNTRIES = "PH,CN,JP,KR,GB,EU,IN,ID,TW,HK,SG,MY,VN,AU,CA,CH,BR,MX,ZA,US"   # US: the API keeps only GDP/CPI rows, as the consensus history (api/us_consensus.py)
 CAL_REFRESH_DAYS = 6
-CAL_ROW = "[country, date, title, indicator, category, period, previous, forecast, importance, ticker]"
+CAL_ROW = "[country, date, title, indicator, category, period, previous, forecast, importance, ticker, actual]"
 
 
 def _period_stamp(kind: str, release: dt.date) -> str:
@@ -168,7 +168,7 @@ def _period_stamp(kind: str, release: dt.date) -> str:
 # TradingView stamps events in UTC. A release at 23:30 UTC on the 19th is the 20th in Tokyo, so the calendar uses the country's
 # own date (a fixed offset; an hour of daylight-saving error cannot move a release across midnight in practice).
 CAL_UTC_OFFSET = {"PH": 8, "CN": 8, "HK": 8, "SG": 8, "MY": 8, "TW": 8, "JP": 9, "KR": 9, "VN": 7, "ID": 7, "IN": 5.5, "AU": 11,
-                  "GB": 0, "EU": 1, "CH": 1, "ZA": 2, "CA": -4, "MX": -6, "BR": -3}
+                  "GB": 0, "EU": 1, "CH": 1, "ZA": 2, "CA": -4, "MX": -6, "BR": -3, "US": -4}
 
 
 def localize_calendar_row(row: list) -> list:
@@ -192,6 +192,10 @@ def _calendar() -> dict:
 
 
 def calendar_due(cal: dict, today: dt.date) -> bool:
+    # A US CPI or GDP-advance print is within 4 days and its consensus is not stored yet: TradingView posts it only a few days
+    # ahead, so fetch again (the figure is pre-registered before the release, never after).
+    if cal.get("us_forecast_missing"):
+        return True
     at = cal.get("at")
     if not at:
         return True
@@ -229,7 +233,7 @@ def calendar_plan() -> int:
                       "fetch_with": "mcp-tv-get-economic-calendar", "countries": CAL_COUNTRIES,
                       "date_from": (today - dt.timedelta(days=7)).isoformat(), "date_to": (today + dt.timedelta(days=31)).isoformat(), "min_importance": 0,
                       "send_in_apply_as": f'"_calendar": [{CAL_ROW}, ...]  # one row per event, fields copied exactly, no filtering: the API classifies',
-                      "note": "date_from is a week back so a release that just printed can be checked against what CGI holds. TradingView lags official releases; the window is ~31 days; do not invent rows. Large results are saved to a file: build the rows from that file with a script, do not retype them."}, indent=1))
+                      "note": "date_from is a week back so a release that just printed can be checked against what CGI holds, and so the US actual is stored. The last field is the event's actual (null before it prints). TradingView lags official releases; the window is ~31 days; do not invent rows. Large results are saved to a file: build the rows from that file with a script, do not retype them."}, indent=1))
     return 0
 
 

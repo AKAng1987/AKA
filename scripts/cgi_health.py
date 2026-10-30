@@ -107,6 +107,16 @@ def main() -> int:
         if capex.get("error"):
             amber.append(f"capex check could not run: {capex['error']}")
 
+    rc = f.get("release_calendar")
+    if rc:
+        nx = rc.get("next") or {}
+        lines.append(f"calendar  next FOMC {nx.get('FOMC')}, CPI {nx.get('CPI')}, GDP {nx.get('GDP')}, SLOOS {nx.get('SLOOS')}; "
+                     f"dates run to {rc.get('last_date')}, {rc.get('n_problems', 0)} problems")
+        for p in rc.get("problems", []):
+            amber.append(f"release calendar {p.get('check')}: {p.get('detail')}")
+        if rc.get("error"):
+            amber.append(f"release calendar check could not run: {rc['error']}")
+
     try:
         behind = tape_behind()
         lines.append(f"tape      {len(behind)} daily rows >1 trading day behind (weekly series excluded)"
