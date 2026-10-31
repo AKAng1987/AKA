@@ -117,6 +117,14 @@ def main() -> int:
         if rc.get("error"):
             amber.append(f"release calendar check could not run: {rc['error']}")
 
+    gd = f.get("gdp")
+    if gd:
+        lines.append(f"gdp       latest release {gd.get('latest_release')}, newest stored {gd.get('newest_stored')}, {gd.get('n_problems', 0)} problems")
+        for p in gd.get("problems", []):
+            amber.append(f"gdp {p.get('check')}: {p.get('detail')}")
+        if gd.get("error"):
+            amber.append(f"gdp check could not run: {gd['error']}")
+
     rp = f.get("rate_path")
     if rp:
         lines.append(f"ratepath  {rp.get('n_meetings_priced')} FOMC meetings priced, {rp.get('n_sr3_quoted')} SOFR futures quoted, "
