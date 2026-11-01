@@ -74,6 +74,8 @@ import json  # noqa: E402
 
 bars = e.parse_chart(json.load(open(os.path.join(HERE, "ph_edge_fixtures", "chart_ali.json"))))
 check("chart: 9 sessions, oldest first", (len(bars), bars[0]["date"], bars[-1]["date"]), (9, "2026-10-20", "2026-10-30"))
+dup = {"chartData": [{"OPEN": 1, "HIGH": 2, "LOW": 1, "CLOSE": 1.5, "VALUE": 10, "CHART_DATE": "Oct 20, 2026 00:00:00"}, {"OPEN": 1, "HIGH": 3, "LOW": 1, "CLOSE": 2.5, "VALUE": 20, "CHART_DATE": "Oct 20, 2026 00:00:00"}]}
+check("chart: a repeated session keeps the last row", [(b["date"], b["close"]) for b in e.parse_chart(dup)], [("2026-10-20", 2.5)])
 check("chart: last close/value", (bars[-1]["close"], bars[-1]["value"]), (15.36, 27139292.0))
 sp = e.parse_stock_page(fx("stock_ali.html"))
 check("stock page: float, outstanding, last", (sp["free_float"], sp["outstanding"], sp["last"]), (44.84, 14292521069.0, 15.36))
@@ -87,5 +89,7 @@ check("dividend subject", "Preferred" in dv["subject"], True)
 ins = e.parse_detail(fx("ins.html"), "insider")["insider"]
 check("insider: who, side, net, value", (ins["name"], ins["side"], ins["net_shares"], ins["net_value"]), ("Virgilio B. Villar", "bought", 20000.0, 4800.0))
 check("insider position", ins["position"], "Chairman of the Board")
+check("hand-typed dates", [e._date(x) for x in ("Oct. 19, 2026", "Aug12, 2026", "July 24, 2026", "Sept 3, 2026", "Oct 28, 2026", "n/a")],
+      ["2026-10-19", "2026-08-12", "2026-07-24", "2026-09-03", "2026-10-28", None])
 print("FAILS:", fails)
 sys.exit(1 if fails else 0)

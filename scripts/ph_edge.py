@@ -121,8 +121,12 @@ def money(text: str) -> Optional[float]:
 
 
 def _date(text: str) -> Optional[str]:
+    """'Oct 28, 2026', 'Oct. 19, 2026', 'Aug12, 2026', 'July 24, 2026', 'Sept 3, 2026' -> ISO (filers type dates by hand)."""
+    m = re.fullmatch(r"\s*([A-Za-z]{3,9})\.?\s*(\d{1,2})\s*,\s*(\d{4})\s*", text or "")
+    if not m:
+        return None
     try:
-        return dt.datetime.strptime(text.strip(), "%b %d, %Y").strftime("%Y-%m-%d")
+        return dt.datetime.strptime(f"{m.group(1)[:3].title()} {m.group(2)} {m.group(3)}", "%b %d %Y").strftime("%Y-%m-%d")
     except ValueError:
         return None
 
@@ -433,8 +437,10 @@ def parse_chart(js: dict) -> list[dict]:
                         "value": float(b.get("VALUE") or 0.0)})
         except (KeyError, ValueError, TypeError):
             continue
-    out.sort(key=lambda x: x["date"])
-    return out
+    by_date = {}
+    for b in out:                       # EDGE occasionally repeats a session: keep the last row for the date
+        by_date[b["date"]] = b
+    return [by_date[d] for d in sorted(by_date)]
 
 
 def fetch_chart(cmpy_id: str, security_id: str, start: dt.date, end: dt.date) -> list[dict]:
