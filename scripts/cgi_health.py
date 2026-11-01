@@ -125,6 +125,14 @@ def main() -> int:
         if gd.get("error"):
             amber.append(f"gdp check could not run: {gd['error']}")
 
+    ph = f.get("ph")
+    if ph:
+        lines.append(f"ph        prices to {ph.get('prices_asof')}, {ph.get('n_liquid')} liquid names; EDGE built {str(ph.get('edge_built_at'))[:16]}; {ph.get('n_problems', 0)} problems")
+        for p in ph.get("problems", []):
+            amber.append(f"ph {p.get('check')}: {p.get('detail')}")
+        if ph.get("error"):
+            amber.append(f"ph check could not run: {ph['error']}")
+
     rp = f.get("rate_path")
     if rp:
         lines.append(f"ratepath  {rp.get('n_meetings_priced')} FOMC meetings priced, {rp.get('n_sr3_quoted')} SOFR futures quoted, "

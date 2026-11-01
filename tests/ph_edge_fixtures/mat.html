@@ -1,0 +1,294 @@
+<!-- 
+    <!DOCTYPE ..> 을 추가할 때는 반드시 HTML이 아닌 XHTML Doctype을 추가할 것. HTML Doctype을 추가하면
+      PDF 생성할 때 오류 발생. DOCTYPE을 추가하지 않아도 아무 문제없으므로 가능한 추가하지 말 것.
+--><!DOCTYPE html PUBLIC "-//W3C//ENTITIES Latin 1 for XHTML//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml-lat1.ent">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="ko" lang="ko">
+ <head> 
+  <meta charset="utf-8" /> 
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" /> 
+  <!-- css-desktop-start --> 
+  <style type="text/css">
+  @charset "utf-8";
+
+html,body{color:#333; background-color: #fff;}
+body,input,textarea,select { font:normal 0.9em thoma, arial, Verdana, sans-serif;}
+
+/* for PDF */
+tr { page-break-inside: avoid; }  
+
+
+img{border:0; vertical-align:middle;}
+address,caption,cite,code,dfn,em,var{font-style:normal;font-weight:normal;}
+li{list-style:none;}
+
+
+input,textarea,select{ vertical-align:middle;}
+input[type="radio"]{margin-right:3px; vertical-align:top;}
+/*IE7 Hack*/
+*:first-child+html input[type="radio"]{margin-right:0px; vertical-align:middle;}
+*:first-child+html input[type="checkbox"]{margin:-5px 0px;}
+
+
+ 
+
+#contentBox{width:688px; border:2px solid #ccc; padding: 8px; }
+#contentBox h1,#contentBox h2,#contentBox h3, #contentBox h4{border-bottom:1px solid #ccc; padding-bottom:15px; text-align:center;}
+#contentBox h1 span,#contentBox h2 span{display:block; font-size:0.8em; margin:5px;}
+#contentBox h4 span{display:block;}
+
+#contentBox .textleft{text-align:left;}
+#contentBox caption{font-weight:bold;}
+#contentBox caption img{ float:right;}
+
+#contentBox th { text-align: center; }
+#contentBox  table{width:100%; border-collapse:collapse; border:1px solid #ccc; margin:15px 0px;}
+#contentBox .type1 th, th.ex { width: 20%; text-align: left; }
+#contentBox .type2 th { text-align: left; }
+#contentBox th {background-color:#eee; color:#444; }
+#contentBox th, #contentBox td {border:1px solid #ccc; padding:3px; font-size:0.8em; }
+caption{text-align:left; margin-bottom:5px; font-size:0.8em; color:#222;}
+
+
+#contentBox h1 img{  display:block; margin:0px auto 8px ;}
+#contentBox p.info{font-size:0.8em;text-align:justify;font-style:italic;}
+#contentBox p.just{text-align:justify;}
+
+
+#contentBox p.reportType {font-weight:bold;  margin:5px 0px;}
+
+#contentBox ul.reportType, #contentBox ul.reportTypeL{ padding:5px;  margin:0px; font-size:0.8em;font-weight:normal; border:1px dashed #bbb; overflow:auto; }
+#contentBox .reportType  span,#contentBox .reportTypeL  span{padding:0px 10px 0px 5px; width:60px; display:inline-block; white-space: nowrap; }
+
+#contentBox .reportType li {
+  margin: 0.8em 0em 0.8em 0em;
+}
+#contentBox .reportTypeL li:first-child {
+    float: left;
+
+    padding-right: 50px;
+    margin: 0.8em 0em 0.8em 0em;
+}
+#contentBox .reportTypeL li {
+    padding-right: 50px;
+    margin: 0.8em 0em 0.8em 0em;
+}
+
+#contentBox ul.status{ padding:0px; margin:0px; }
+#contentBox .status li {float:left;  padding-right:50px;}
+
+#contentBox  dl.choice{border:none; margin:0px; padding:0px}
+
+
+#contentBox dl{border:2px solid #bbb; padding:15px; }
+#contentBox dl.none{border:none; padding:8px; }
+
+#contentBox dd{margin:5px ;}
+#contentBox dd span{padding:0px 10px;}
+#contentBox dl table{ margin:5px 0px;}
+#contentBox dd.hline{float:left;  padding: 0px 15px;}
+#contentBox .clear{clear:both}
+
+#contentBox .indent15{text-indent:15px;}
+#contentBox .indent20{text-indent:20px;}
+#contentBox .em{font-size:110%; font-weight:bold; text-align:center; padding:10px 100px;}
+#contentBox .sub{font-weight:bold;}
+
+
+#contentBox ul.choice{ padding:0px; }
+#contentBox ul.choice span{padding:0px 10px 0px 5px;}
+
+
+
+
+
+
+#contentBox hr{margin:10px 0px; height:1px; border-width:0;  background-color:#ccc; }
+
+
+#remarkContents {width: 688px; margin: 10px; }
+#remarkContents li {list-style-type: circle; margin-top: 3px;}
+
+  </style> 
+  <!-- css-desktop-end --> 
+  <style type="text/css">
+    input { border: none; }
+
+    .fmtNumber {
+      text-align: right;
+    }
+
+    .alignRight {
+      text-align: right;
+    }
+    
+    span.valInput {
+      font-size: 1.1em;
+      display: block;
+    }
+    p.valText {
+      font-size: 1.1em;
+      white-space: pre-line;
+    }
+    span.valSelect {
+      font-size: 1.1em;
+      display: block;
+    }
+    textarea {
+      color: black;
+      border: none; 
+      white-space: pre-line; 
+      overflow-y: auto; 
+      word-wrap: break-word; 
+      resize: none;
+    }
+  </style> 
+ </head> 
+ <body><a href="https://edge.pse.com.ph/cdn-cgi/content?id=7OFGsj1275sdewS3GWjvuDvDCX3WnWKIR8TPr7GYLNc-1793521713.3064957-1.2.1.1-jb34307koYuLqD.4UgYJks6ylWVf5rPj1NiiutYuXFXnfqa8MWc1LeXvNf_3JXIg" aria-hidden="true" rel="nofollow noopener" style="display: none !important; visibility: hidden !important"></a>
+<div id="remarkContents" style="">       <table style="width: 100%; margin-bottom: 7px; font-weight: bold; "> <tr style="padding: 0px;">                                        <td><td style="font-size: 150%; width: 80%;">Remarks</td> </td>                                       <td style="text-align:right;">C07749-2026</td>              </tr>                     </table>                      <span style="font-size: 1.0em; margin-left: 20px;"></span> <ul style="margin-top: 0;">   <li>This report is being disseminated solely for information purposes and does not preclude any regulatory action that the Exchange may take in connection with the company’s compliance with the Consolidated Listing and Disclosure Rules and other relevant laws, rules, and regulations.</li>              </ul>     </div> 
+  <div id="form1" action="/submission/accomplish"> 
+   <div id="contentBox"> 
+    <h2>SECURITIES AND EXCHANGE COMMISSION<span>SEC FORM 17-C</span></h2> 
+    <h4>CURRENT REPORT UNDER SECTION 17<br /> OF THE SECURITIES REGULATION CODE <br />AND SRC RULE 17.2(c) THEREUNDER </h4> 
+    <dl> 
+     <dt>
+       1. Date of Report (Date of earliest event reported) 
+     </dt> 
+     <dd> 
+      <span class="valInput ">Oct 29, 2026</span> 
+     </dd> 
+     <dt>
+       2. SEC Identification Number 
+     </dt> 
+     <dd> 
+      <span class="valInput ">CS200909233</span> 
+     </dd> 
+     <dt>
+       3. BIR Tax Identification No. 
+     </dt> 
+     <dd> 
+      <span class="valInput ">007-315-916</span> 
+     </dd> 
+     <dt>
+       4. Exact name of issuer as specified in its charter 
+     </dt> 
+     <dd> 
+      <span class="valInput ">ALTERNERGY HOLDINGS CORPORATION</span> 
+     </dd> 
+     <dt>
+       5. Province, country or other jurisdiction of incorporation 
+     </dt> 
+     <dd> 
+      <span class="valInput ">Metro Manila, Philippines</span> 
+     </dd> 
+     <dt>
+       6. Industry Classification Code(SEC Use Only) 
+     </dt> 
+     <dd> 
+      <input readonly="" disabled="disabled" type="text" value="" name="id5" /> 
+     </dd> 
+     <dt>
+       7. Address of principal office 
+     </dt> 
+     <dd> 
+      <span class="valInput ">Level 3B 111 Paseo de Roxas Bldg., Paseo de Roxas Ave. corner Legazpi St., Legaspi Village, Makati City </span> 
+      <span>Postal Code</span> 
+      <span><span class="valInput ">1229</span></span> 
+     </dd> 
+     <dt>
+       8. Issuer's telephone number, including area code 
+     </dt> 
+     <dd> 
+      <span class="valInput ">+632 8813 4678</span> 
+     </dd> 
+     <dt>
+       9. Former name or former address, if changed since last report 
+     </dt> 
+     <dd> 
+      <span class="valInput ">NA</span> 
+     </dd> 
+     <dt>
+       10. Securities registered pursuant to Sections 8 and 12 of the SRC or Sections 4 and 8 of the RSA 
+     </dt> 
+     <dd> 
+      <table id="Securities"> 
+       <caption></caption> 
+       <tbody> 
+        <tr> 
+         <th>Title of Each Class</th> 
+         <th>Number of Shares of Common Stock Outstanding and Amount of Debt Outstanding</th> 
+         <th></th> 
+        </tr> 
+        <tr> 
+         <td><span class="valInput ">Common</span></td> 
+         <td><span class="valInput fmtNumber">3,933,840,480</span></td> 
+         <td></td> 
+        </tr> 
+        <tr> 
+         <td><span class="valInput ">Perpetual Preferred 1</span></td> 
+         <td><span class="valInput fmtNumber">370,398,637</span></td> 
+         <td><a href="javascript:void(0);" id="remNew"></a></td> 
+        </tr> 
+        <tr> 
+         <td><span class="valInput ">Perpetual Preferred 2-Series A</span></td> 
+         <td><span class="valInput fmtNumber">100,000,000</span></td> 
+         <td><a href="javascript:void(0);" id="remNew"></a></td> 
+        </tr> 
+        <tr> 
+         <td><span class="valInput ">Fixed Rate Notes due 2028</span></td> 
+         <td><span class="valInput fmtNumber">2,000,000,000</span></td> 
+         <td><a href="javascript:void(0);" id="remNew"></a></td> 
+        </tr> 
+       </tbody> 
+      </table> 
+     </dd> 
+     <dt>
+       11. Indicate the item numbers reported herein 
+     </dt> 
+     <dd> 
+      <span class="valInput ">Item 9 - Other Events</span> 
+     </dd> 
+    </dl> 
+    <p class="info">The Exchange does not warrant and holds no responsibility for the veracity of the facts and representations contained in all corporate disclosures, including financial reports. All data contained herein are prepared and submitted by the disclosing party to the Exchange, and are disseminated solely for purposes of information. Any questions on the data contained herein should be addressed directly to the Corporate Information Officer of the disclosing party.</p> 
+    <h1><img src="clogo/null" alt="" id="companyLogo" width="175" /><span id="companyName">Alternergy Holdings Corporation</span><span id="companyStockSymbol">ALTER</span></h1> 
+    <h4>PSE Disclosure Form 4-30 - Material Information/Transactions <span><i>References: SRC Rule 17 (SEC Form 17-C) and <br /> Sections 4.1 and 4.4 of the Revised Disclosure Rules</i></span> </h4> 
+    <table class="type2"> 
+     <tbody> 
+      <tr> 
+       <th>Subject of the Disclosure</th> 
+      </tr> 
+      <tr> 
+       <td><p class="valText">Initial Assessment Report in connection with Alternergy Holdings Corporation's (&quot;ALTER&quot;) compliance with the Green Equity Guidelines requirements</p></td> 
+      </tr> 
+      <tr> 
+       <th>Background/Description of the Disclosure</th> 
+      </tr> 
+      <tr> 
+       <td><p class="valText">Please see attached Independent Limited Assurance Report dated October 15, 2026 (the &quot;Report&quot;) from SGV &amp; Co., reporting on ALTER’s Green Equity alignment contained in ALTER and Subsidiaries’ Green Equity Report for the year ended June 30, 2026. The required notarized Certification signed by ALTER's President and dated October 29, 2026 can be found at the end of the Report.</p></td> 
+      </tr> 
+      <tr> 
+       <th>Other Relevant Information</th> 
+      </tr> 
+      <tr> 
+       <td><p class="valText">NA</p></td> 
+      </tr> 
+     </tbody> 
+    </table>  
+    <div style="margin-top: 48px;"> 
+     <span style="font-weight: bold; font-size: 0.8em;">Filed on behalf by:</span> 
+     <table class="type2" style="margin-top: 3px;"> 
+      <tbody> 
+       <tr> 
+        <th style="width: 40%;">Name</th> 
+        <td>Kimberly Rose Pagdilao</td> 
+       </tr> 
+       <tr> 
+        <th>Designation</th> 
+        <td>Corporate Counsel / Deputy CIO</td> 
+       </tr> 
+      </tbody> 
+     </table> 
+    </div>
+   </div> 
+  </div>  
+ </body>
+</html>

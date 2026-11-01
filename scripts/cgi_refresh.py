@@ -232,6 +232,8 @@ def calendar_plan() -> int:
     print(json.dumps({"calendar_stored_at": cal.get("at"), "rows_stored": len(cal.get("rows", [])), "fetch_now": calendar_due(cal, today),
                       "fetch_with": "mcp-tv-get-economic-calendar", "countries": CAL_COUNTRIES,
                       "date_from": (today - dt.timedelta(days=7)).isoformat(), "date_to": (today + dt.timedelta(days=31)).isoformat(), "min_importance": 0,
+                      "also_for_philippines": {"countries": "PH", "min_importance": -1, "same_dates": True,
+                                               "why": "the Philippines tab tracks PMI, core inflation, m/m, industrial production, remittances and reserves, which TradingView rates below medium importance; add these rows to the same _calendar list (duplicates are dropped by the API)"},
                       "send_in_apply_as": f'"_calendar": [{CAL_ROW}, ...]  # one row per event, fields copied exactly, no filtering: the API classifies',
                       "note": "date_from is a week back so a release that just printed can be checked against what CGI holds, and so the US actual is stored. The last field is the event's actual (null before it prints). TradingView lags official releases; the window is ~31 days; do not invent rows. Large results are saved to a file: build the rows from that file with a script, do not retype them."}, indent=1))
     return 0

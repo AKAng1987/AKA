@@ -1,0 +1,509 @@
+<!-- 
+    <!DOCTYPE ..> 을 추가할 때는 반드시 HTML이 아닌 XHTML Doctype을 추가할 것. HTML Doctype을 추가하면
+      PDF 생성할 때 오류 발생. DOCTYPE을 추가하지 않아도 아무 문제없으므로 가능한 추가하지 말 것.
+--><!DOCTYPE html PUBLIC "-//W3C//ENTITIES Latin 1 for XHTML//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml-lat1.ent">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="ko" lang="ko">
+ <head> 
+  <meta charset="utf-8" /> 
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" /> 
+  <!-- css-desktop-start --> 
+  <style type="text/css">
+  @charset "utf-8";
+
+html,body{color:#333; background-color: #fff;}
+body,input,textarea,select { font:normal 0.9em thoma, arial, Verdana, sans-serif;}
+
+/* for PDF */
+tr { page-break-inside: avoid; }  
+
+
+img{border:0; vertical-align:middle;}
+address,caption,cite,code,dfn,em,var{font-style:normal;font-weight:normal;}
+li{list-style:none;}
+
+
+input,textarea,select{ vertical-align:middle;}
+input[type="radio"]{margin-right:3px; vertical-align:top;}
+/*IE7 Hack*/
+*:first-child+html input[type="radio"]{margin-right:0px; vertical-align:middle;}
+*:first-child+html input[type="checkbox"]{margin:-5px 0px;}
+
+
+ 
+
+#contentBox{width:688px; border:2px solid #ccc; padding: 8px; }
+#contentBox h1,#contentBox h2,#contentBox h3, #contentBox h4{border-bottom:1px solid #ccc; padding-bottom:15px; text-align:center;}
+#contentBox h1 span,#contentBox h2 span{display:block; font-size:0.8em; margin:5px;}
+#contentBox h4 span{display:block;}
+
+#contentBox .textleft{text-align:left;}
+#contentBox caption{font-weight:bold;}
+#contentBox caption img{ float:right;}
+
+#contentBox th { text-align: center; }
+#contentBox  table{width:100%; border-collapse:collapse; border:1px solid #ccc; margin:15px 0px;}
+#contentBox .type1 th, th.ex { width: 20%; text-align: left; }
+#contentBox .type2 th { text-align: left; }
+#contentBox th {background-color:#eee; color:#444; }
+#contentBox th, #contentBox td {border:1px solid #ccc; padding:3px; font-size:0.8em; }
+caption{text-align:left; margin-bottom:5px; font-size:0.8em; color:#222;}
+
+
+#contentBox h1 img{  display:block; margin:0px auto 8px ;}
+#contentBox p.info{font-size:0.8em;text-align:justify;font-style:italic;}
+#contentBox p.just{text-align:justify;}
+
+
+#contentBox p.reportType {font-weight:bold;  margin:5px 0px;}
+
+#contentBox ul.reportType, #contentBox ul.reportTypeL{ padding:5px;  margin:0px; font-size:0.8em;font-weight:normal; border:1px dashed #bbb; overflow:auto; }
+#contentBox .reportType  span,#contentBox .reportTypeL  span{padding:0px 10px 0px 5px; width:60px; display:inline-block; white-space: nowrap; }
+
+#contentBox .reportType li {
+  margin: 0.8em 0em 0.8em 0em;
+}
+#contentBox .reportTypeL li:first-child {
+    float: left;
+
+    padding-right: 50px;
+    margin: 0.8em 0em 0.8em 0em;
+}
+#contentBox .reportTypeL li {
+    padding-right: 50px;
+    margin: 0.8em 0em 0.8em 0em;
+}
+
+#contentBox ul.status{ padding:0px; margin:0px; }
+#contentBox .status li {float:left;  padding-right:50px;}
+
+#contentBox  dl.choice{border:none; margin:0px; padding:0px}
+
+
+#contentBox dl{border:2px solid #bbb; padding:15px; }
+#contentBox dl.none{border:none; padding:8px; }
+
+#contentBox dd{margin:5px ;}
+#contentBox dd span{padding:0px 10px;}
+#contentBox dl table{ margin:5px 0px;}
+#contentBox dd.hline{float:left;  padding: 0px 15px;}
+#contentBox .clear{clear:both}
+
+#contentBox .indent15{text-indent:15px;}
+#contentBox .indent20{text-indent:20px;}
+#contentBox .em{font-size:110%; font-weight:bold; text-align:center; padding:10px 100px;}
+#contentBox .sub{font-weight:bold;}
+
+
+#contentBox ul.choice{ padding:0px; }
+#contentBox ul.choice span{padding:0px 10px 0px 5px;}
+
+
+
+
+
+
+#contentBox hr{margin:10px 0px; height:1px; border-width:0;  background-color:#ccc; }
+
+
+#remarkContents {width: 688px; margin: 10px; }
+#remarkContents li {list-style-type: circle; margin-top: 3px;}
+
+  </style> 
+  <!-- css-desktop-end --> 
+  <style type="text/css">
+    input { border: none; }
+
+    .fmtNumber {
+      text-align: right;
+    }
+
+    .alignRight {
+      text-align: right;
+    }
+    
+    span.valInput {
+      font-size: 1.1em;
+      display: block;
+    }
+    p.valText {
+      font-size: 1.1em;
+      white-space: pre-line;
+    }
+    span.valSelect {
+      font-size: 1.1em;
+      display: block;
+    }
+    textarea {
+      color: black;
+      border: none; 
+      white-space: pre-line; 
+      overflow-y: auto; 
+      word-wrap: break-word; 
+      resize: none;
+    }
+  </style> 
+ </head> 
+ <body><a href="https://edge.pse.com.ph/cdn-cgi/content?id=1bW8POkIMq0WH.ponBI7lLUz54ZPpMlAMNoDL31hPzc-1793519352.2651072-1.2.1.1-Dcw3foK8tNEHBdTlLoH2IUBKtwCVLA8u07G3gxQ0PBk6idMwv1FT..GdruSWKjG8" aria-hidden="true" rel="nofollow noopener" style="display: none !important; visibility: hidden !important"></a>
+<div id="remarkContents" style="">       <table style="width: 100%; margin-bottom: 7px; font-weight: bold; "> <tr style="padding: 0px;">                                        <td></td>                                       <td style="text-align:right;">C07681-2026</td>              </tr>                     </table>                      <span style="font-size: 1.0em; margin-left: 20px;"></span> <ul style="margin-top: 0;">                 </ul>     </div> 
+  <div id="form1" action="/submission/accomplish"> 
+   <div id="contentBox"> 
+    <h2>SECURITIES AND EXCHANGE COMMISSION<span>SEC FORM 17-C</span></h2> 
+    <h4>CURRENT REPORT UNDER SECTION 17<br /> OF THE SECURITIES REGULATION CODE <br />AND SRC RULE 17.2(c) THEREUNDER </h4> 
+    <dl> 
+     <dt>
+       1. Date of Report (Date of earliest event reported) 
+     </dt> 
+     <dd> 
+      <span class="valInput ">Oct 28, 2026</span> 
+     </dd> 
+     <dt>
+       2. SEC Identification Number 
+     </dt> 
+     <dd> 
+      <span class="valInput ">147212</span> 
+     </dd> 
+     <dt>
+       3. BIR Tax Identification No. 
+     </dt> 
+     <dd> 
+      <span class="valInput ">000-323-228</span> 
+     </dd> 
+     <dt>
+       4. Exact name of issuer as specified in its charter 
+     </dt> 
+     <dd> 
+      <span class="valInput ">INTERNATIONAL CONTAINER TERMINAL SERVICES, INC.</span> 
+     </dd> 
+     <dt>
+       5. Province, country or other jurisdiction of incorporation 
+     </dt> 
+     <dd> 
+      <span class="valInput ">Manila, Philippines</span> 
+     </dd> 
+     <dt>
+       6. Industry Classification Code(SEC Use Only) 
+     </dt> 
+     <dd> 
+      <input readonly="" disabled="disabled" type="text" value="" name="id5" /> 
+     </dd> 
+     <dt>
+       7. Address of principal office 
+     </dt> 
+     <dd> 
+      <span class="valInput ">ICTSI Administration Building, Manila International Container Terminal, South Access Road, Manila</span> 
+      <span>Postal Code</span> 
+      <span><span class="valInput ">1012</span></span> 
+     </dd> 
+     <dt>
+       8. Issuer's telephone number, including area code 
+     </dt> 
+     <dd> 
+      <span class="valInput ">+63 2 82454101</span> 
+     </dd> 
+     <dt>
+       9. Former name or former address, if changed since last report 
+     </dt> 
+     <dd> 
+      <span class="valInput ">Not Applicable</span> 
+     </dd> 
+     <dt>
+       10. Securities registered pursuant to Sections 8 and 12 of the SRC or Sections 4 and 8 of the RSA 
+     </dt> 
+     <dd> 
+      <table id="Securities"> 
+       <caption></caption> 
+       <tbody> 
+        <tr> 
+         <th>Title of Each Class</th> 
+         <th>Number of Shares of Common Stock Outstanding and Amount of Debt Outstanding</th> 
+         <th></th> 
+        </tr> 
+        <tr> 
+         <td><span class="valInput ">Common Stock Outstanding (Current)</span></td> 
+         <td><span class="valInput fmtNumber">2,017,682,695</span></td> 
+         <td></td> 
+        </tr> 
+       </tbody> 
+      </table> 
+     </dd> 
+     <dt>
+       11. Indicate the item numbers reported herein 
+     </dt> 
+     <dd> 
+      <span class="valInput ">9</span> 
+     </dd> 
+    </dl> 
+    <p class="info">The Exchange does not warrant and holds no responsibility for the veracity of the facts and representations contained in all corporate disclosures, including financial reports. All data contained herein are prepared and submitted by the disclosing party to the Exchange, and are disseminated solely for purposes of information. Any questions on the data contained herein should be addressed directly to the Corporate Information Officer of the disclosing party.</p> 
+    <h1><img src="clogo/83/cl59cc9041r876.png" alt="" id="companyLogo" width="175" /><span id="companyName">International Container Terminal Services, Inc.</span><span id="companyStockSymbol">ICT</span></h1> 
+    <h4>PSE Disclosure Form 9-1 - Share Buy-Back Transactions <span><i>References: Section 9 of the Revised Disclosure Rules</i></span> </h4> 
+    <table class="type1"> 
+     <tbody> 
+      <tr> 
+       <th>Subject of the Disclosure</th> 
+      </tr> 
+      <tr> 
+       <td><p class="valText">Purchase of ICTSI shares by the Company</p></td> 
+      </tr> 
+      <tr> 
+       <th>Background/Description of the Disclosure</th> 
+      </tr> 
+      <tr> 
+       <td><p class="valText">Please find below details of purchase of ICTSI shares by the company.</p></td> 
+      </tr> 
+     </tbody> 
+    </table> 
+    <p class="reportType">Type of Securities</p> 
+    <ul class="reportType"> 
+     <li style="background-color: white;"><input readonly="readonly" disabled="disabled" type="radio" name="TypeSecurities13" value="COMMON" data-type="RADIO" checked="checked" style="background-color: white;" /><span>Common</span></li> 
+     <li style="background-color: white;"><input readonly="readonly" disabled="disabled" type="radio" name="TypeSecurities14" value="PREFERRED" data-type="RADIO" style="background-color: white;" /><span>Preferred</span><span class="valInput ">-</span></li> 
+     <li style="background-color: white;"><input readonly="readonly" disabled="disabled" type="radio" name="TypeSecurities16" value="OTHERS" data-type="RADIO" style="background-color: white;" /><span>Others</span><span class="valInput ">-</span></li> 
+    </ul> 
+    <table id="BuyBack" data-type="GRID_ROLLUP_TOT"> 
+     <caption>
+       Details of Share Buy-Back Transaction(s) 
+     </caption> 
+     <tbody> 
+      <tr> 
+       <th>Date of Transaction</th> 
+       <th>Number of Shares Purchased</th> 
+       <th>Price Per Share</th> 
+       <th></th> 
+      </tr> 
+      <tr> 
+       <td><span class="valInput ">Oct 28, 2026</span></td> 
+       <td><span class="valInput fmtNumber">65,000</span></td> 
+       <td><span class="valInput alignRight">820.00</span></td> 
+       <td></td> 
+      </tr> 
+      <tr> 
+       <td><span class="valInput ">Oct 28, 2026</span></td> 
+       <td><span class="valInput fmtNumber">5,630</span></td> 
+       <td><span class="valInput alignRight">822.00</span></td> 
+       <td><a href="javascript:void(0);" id="remNew"></a></td> 
+      </tr> 
+      <tr> 
+       <td><span class="valInput ">Oct 28, 2026</span></td> 
+       <td><span class="valInput fmtNumber">2,030</span></td> 
+       <td><span class="valInput alignRight">822.50</span></td> 
+       <td><a href="javascript:void(0);" id="remNew"></a></td> 
+      </tr> 
+      <tr> 
+       <td><span class="valInput ">Oct 28, 2026</span></td> 
+       <td><span class="valInput fmtNumber">20,140</span></td> 
+       <td><span class="valInput alignRight">823.00</span></td> 
+       <td><a href="javascript:void(0);" id="remNew"></a></td> 
+      </tr> 
+      <tr> 
+       <td><span class="valInput ">Oct 28, 2026</span></td> 
+       <td><span class="valInput fmtNumber">3,190</span></td> 
+       <td><span class="valInput alignRight">825.00</span></td> 
+       <td><a href="javascript:void(0);" id="remNew"></a></td> 
+      </tr> 
+      <tr> 
+       <td><span class="valInput ">Oct 28, 2026</span></td> 
+       <td><span class="valInput fmtNumber">570</span></td> 
+       <td><span class="valInput alignRight">825.50</span></td> 
+       <td><a href="javascript:void(0);" id="remNew"></a></td> 
+      </tr> 
+      <tr> 
+       <td><span class="valInput ">Oct 28, 2026</span></td> 
+       <td><span class="valInput fmtNumber">2,300</span></td> 
+       <td><span class="valInput alignRight">826.00</span></td> 
+       <td><a href="javascript:void(0);" id="remNew"></a></td> 
+      </tr> 
+      <tr> 
+       <td><span class="valInput ">Oct 28, 2026</span></td> 
+       <td><span class="valInput fmtNumber">4,240</span></td> 
+       <td><span class="valInput alignRight">827.00</span></td> 
+       <td><a href="javascript:void(0);" id="remNew"></a></td> 
+      </tr> 
+      <tr> 
+       <td><span class="valInput ">Oct 28, 2026</span></td> 
+       <td><span class="valInput fmtNumber">29,740</span></td> 
+       <td><span class="valInput alignRight">827.50</span></td> 
+       <td><a href="javascript:void(0);" id="remNew"></a></td> 
+      </tr> 
+      <tr> 
+       <td><span class="valInput ">Oct 28, 2026</span></td> 
+       <td><span class="valInput fmtNumber">20,470</span></td> 
+       <td><span class="valInput alignRight">830.00</span></td> 
+       <td><a href="javascript:void(0);" id="remNew"></a></td> 
+      </tr> 
+      <tr> 
+       <td><span class="valInput ">Oct 28, 2026</span></td> 
+       <td><span class="valInput fmtNumber">1,050</span></td> 
+       <td><span class="valInput alignRight">831.50</span></td> 
+       <td><a href="javascript:void(0);" id="remNew"></a></td> 
+      </tr> 
+      <tr> 
+       <td><span class="valInput ">Oct 28, 2026</span></td> 
+       <td><span class="valInput fmtNumber">3,670</span></td> 
+       <td><span class="valInput alignRight">832.00</span></td> 
+       <td><a href="javascript:void(0);" id="remNew"></a></td> 
+      </tr> 
+      <tr> 
+       <td><span class="valInput ">Oct 28, 2026</span></td> 
+       <td><span class="valInput fmtNumber">2,170</span></td> 
+       <td><span class="valInput alignRight">832.50</span></td> 
+       <td><a href="javascript:void(0);" id="remNew"></a></td> 
+      </tr> 
+      <tr> 
+       <td><span class="valInput ">Oct 28, 2026</span></td> 
+       <td><span class="valInput fmtNumber">4,210</span></td> 
+       <td><span class="valInput alignRight">833.00</span></td> 
+       <td><a href="javascript:void(0);" id="remNew"></a></td> 
+      </tr> 
+      <tr> 
+       <td><span class="valInput ">Oct 28, 2026</span></td> 
+       <td><span class="valInput fmtNumber">9,910</span></td> 
+       <td><span class="valInput alignRight">834.00</span></td> 
+       <td><a href="javascript:void(0);" id="remNew"></a></td> 
+      </tr> 
+      <tr> 
+       <td><span class="valInput ">Oct 28, 2026</span></td> 
+       <td><span class="valInput fmtNumber">1,450</span></td> 
+       <td><span class="valInput alignRight">834.50</span></td> 
+       <td><a href="javascript:void(0);" id="remNew"></a></td> 
+      </tr> 
+      <tr> 
+       <td><span class="valInput ">Oct 28, 2026</span></td> 
+       <td><span class="valInput fmtNumber">2,540</span></td> 
+       <td><span class="valInput alignRight">835.00</span></td> 
+       <td><a href="javascript:void(0);" id="remNew"></a></td> 
+      </tr> 
+      <tr> 
+       <td><span class="valInput ">Oct 28, 2026</span></td> 
+       <td><span class="valInput fmtNumber">5,000</span></td> 
+       <td><span class="valInput alignRight">835.50</span></td> 
+       <td><a href="javascript:void(0);" id="remNew"></a></td> 
+      </tr> 
+      <tr> 
+       <td><span class="valInput ">Oct 28, 2026</span></td> 
+       <td><span class="valInput fmtNumber">3,400</span></td> 
+       <td><span class="valInput alignRight">836.00</span></td> 
+       <td><a href="javascript:void(0);" id="remNew"></a></td> 
+      </tr> 
+      <tr> 
+       <td><span class="valInput ">Oct 28, 2026</span></td> 
+       <td><span class="valInput fmtNumber">220</span></td> 
+       <td><span class="valInput alignRight">836.50</span></td> 
+       <td><a href="javascript:void(0);" id="remNew"></a></td> 
+      </tr> 
+      <tr> 
+       <td><span class="valInput ">Oct 28, 2026</span></td> 
+       <td><span class="valInput fmtNumber">580</span></td> 
+       <td><span class="valInput alignRight">837.00</span></td> 
+       <td><a href="javascript:void(0);" id="remNew"></a></td> 
+      </tr> 
+      <tr> 
+       <td><span class="valInput ">Oct 28, 2026</span></td> 
+       <td><span class="valInput fmtNumber">3,970</span></td> 
+       <td><span class="valInput alignRight">837.50</span></td> 
+       <td><a href="javascript:void(0);" id="remNew"></a></td> 
+      </tr> 
+      <tr> 
+       <td><span class="valInput ">Oct 28, 2026</span></td> 
+       <td><span class="valInput fmtNumber">10,850</span></td> 
+       <td><span class="valInput alignRight">838.00</span></td> 
+       <td><a href="javascript:void(0);" id="remNew"></a></td> 
+      </tr> 
+      <tr> 
+       <td><span class="valInput ">Oct 28, 2026</span></td> 
+       <td><span class="valInput fmtNumber">7,440</span></td> 
+       <td><span class="valInput alignRight">838.50</span></td> 
+       <td><a href="javascript:void(0);" id="remNew"></a></td> 
+      </tr> 
+      <tr> 
+       <td><span class="valInput ">Oct 28, 2026</span></td> 
+       <td><span class="valInput fmtNumber">5,200</span></td> 
+       <td><span class="valInput alignRight">839.00</span></td> 
+       <td><a href="javascript:void(0);" id="remNew"></a></td> 
+      </tr> 
+      <tr> 
+       <td><span class="valInput ">Oct 28, 2026</span></td> 
+       <td><span class="valInput fmtNumber">4,230</span></td> 
+       <td><span class="valInput alignRight">839.50</span></td> 
+       <td><a href="javascript:void(0);" id="remNew"></a></td> 
+      </tr> 
+      <tr> 
+       <td><span class="valInput ">Oct 28, 2026</span></td> 
+       <td><span class="valInput fmtNumber">30,800</span></td> 
+       <td><span class="valInput alignRight">840.00</span></td> 
+       <td><a href="javascript:void(0);" id="remNew"></a></td> 
+      </tr> 
+      <tr> 
+       <td></td> 
+       <td><span data-type="TOTAL" style="display: block; text-align: right;">250,000</span></td> 
+       <td></td> 
+       <td></td> 
+      </tr> 
+     </tbody> 
+    </table> 
+    <table class="type1" id="EffNumSh"> 
+     <caption>
+       Effects on Number of Shares 
+     </caption> 
+     <tbody> 
+      <tr> 
+       <th></th> 
+       <th>Before</th> 
+       <th>After</th> 
+      </tr> 
+      <tr> 
+       <th class="ex">Outstanding Shares</th> 
+       <td><span class="valInput ">2,017,682,695</span></td> 
+       <td><span class="valInput ">2,017,432,695</span></td> 
+      </tr> 
+      <tr> 
+       <th class="ex">Treasury Shares</th> 
+       <td><span class="valInput ">27,494,976</span></td> 
+       <td><span class="valInput ">27,744,976</span></td> 
+      </tr> 
+     </tbody> 
+    </table> 
+    <table class="type1"> 
+     <tbody> 
+      <tr> 
+       <th>Cumulative Number of Shares Purchased to Date <sup>1</sup></th> 
+       <td><span class="valInput ">86,029,020</span></td> 
+      </tr> 
+      <tr> 
+       <th>Total Amount Appropriated for the Buy-Back Program</th> 
+       <td><span class="valInput ">-</span></td> 
+      </tr> 
+      <tr> 
+       <th>Total Amount of Shares Repurchased</th> 
+       <td><span class="valInput ">Php15.84B</span></td> 
+      </tr> 
+     </tbody> 
+    </table> 
+    <table class="type1"> 
+     <tbody> 
+      <tr> 
+       <th>Other Relevant Information</th> 
+      </tr> 
+      <tr> 
+       <td><p class="valText">Cumulative Number of Shares Purchased to Date is the aggregate number of shares purchased by the Company from September 1, 2015 to date. Total Amount of Shares for re-purchase, approved and authorized by the Board of ICTSI on September 16, 2015, November 17, 2016, November 26, 2018 and October 10, 2019 is for up to 110 million shares. Total Amount of Shares Repurchased is the Total Cost of the Cumulative Number of Shares Purchased to Date.</p></td> 
+      </tr> 
+     </tbody> 
+    </table> 
+    <p><sup>1</sup> From the date when the share buy-back program commenced. </p>  
+    <div style="margin-top: 48px;"> 
+     <span style="font-weight: bold; font-size: 0.8em;">Filed on behalf by:</span> 
+     <table class="type2" style="margin-top: 3px;"> 
+      <tbody> 
+       <tr> 
+        <th style="width: 40%;">Name</th> 
+        <td>Arthur Tabuena</td> 
+       </tr> 
+       <tr> 
+        <th>Designation</th> 
+        <td>Vice President, Global Investor Relations</td> 
+       </tr> 
+      </tbody> 
+     </table> 
+    </div>
+   </div> 
+  </div>  
+ </body>
+</html>
