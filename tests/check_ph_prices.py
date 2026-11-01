@@ -52,5 +52,23 @@ bars2 = [{"date": "2026-11-02", "close": 1}, {"date": "2026-11-03", "close": 2}]
 check("run at 10:00 Tuesday drops today's bar", len(P.drop_open_session(bars2, dt.datetime(2026, 11, 3, 10, 0, tzinfo=M))), 1)
 check("run at 15:10 Tuesday keeps it", len(P.drop_open_session(bars2, dt.datetime(2026, 11, 3, 15, 10, tzinfo=M))), 2)
 check("run on Saturday keeps it (no session)", len(P.drop_open_session([{"date": "2026-10-30", "close": 1}], dt.datetime(2026, 10, 31, 9, 0, tzinfo=M))), 1)
+# ── ph_run_check
+import ph_run_check as R  # noqa: E402
+
+M = dt.timezone(dt.timedelta(hours=8))
+tue_1520 = dt.datetime(2026, 11, 3, 15, 20, tzinfo=M)
+iso = lambda mins: (tue_1520.astimezone(dt.timezone.utc) - dt.timedelta(minutes=mins)).isoformat()
+good = dict(screener={"asof": "2026-11-03", "built_at": iso(5)}, edge={"built_at": iso(10), "last_run": {"filings_tried": 10, "n_failed": 1}}, index={"scanned_at": iso(8)},
+            bars={"bars": {"AAA": [["2026-11-02", 1, 1, 1, 1, 1], ["2026-11-03", 1, 1, 1, 1, 1]]}}, breadth={"as_of": "2026-11-03"})
+check("expected date: Tuesday 15:20 is today; Tuesday 10:00 is Monday; Monday 10:00 is Friday; Saturday is Friday",
+      [R.expected_asof(dt.datetime(2026, 11, 3, 15, 20, tzinfo=M)), R.expected_asof(dt.datetime(2026, 11, 3, 10, 0, tzinfo=M)), R.expected_asof(dt.datetime(2026, 11, 2, 10, 0, tzinfo=M)), R.expected_asof(dt.datetime(2026, 11, 7, 9, 0, tzinfo=M))],
+      ["2026-11-03", "2026-11-02", "2026-10-30", "2026-11-06"])
+check("run check: a good daily run is OK", R.assess(tue_1520, "daily", **good)["ok"], True)
+stale = dict(good, screener={"asof": "2026-11-02", "built_at": iso(5)}, bars={"bars": {"AAA": [["2026-11-02", 1, 1, 1, 1, 1]], "BBB": [["2026-11-02", 1, 1, 1, 1, 1]]}}, breadth={"as_of": "2026-11-02"})
+rs = R.assess(tue_1520, "daily", **stale)
+check("run check: today's bar missing is a problem that says holiday or lag with counts", (rs["ok"], "0 of 2 names" in rs["messages"][0], "holiday" in rs["messages"][0]), (False, True, True))
+check("run check: snapshots not stored by this run", [m for m in R.assess(tue_1520, "daily", **dict(good, edge={"built_at": iso(600)}))["messages"]], ["EDGE snapshot was not stored by this run"])
+check("run check: many filings failing to parse", R.assess(tue_1520, "daily", **dict(good, edge={"built_at": iso(3), "last_run": {"filings_tried": 10, "n_failed": 6}}))["messages"][0][:2], "6 ")
+check("run check: the evening edge-only run does not need prices", R.assess(dt.datetime(2026, 11, 3, 18, 40, tzinfo=M), "edge", screener=None, edge={"built_at": (dt.datetime(2026, 11, 3, 18, 40, tzinfo=M).astimezone(dt.timezone.utc) - dt.timedelta(minutes=4)).isoformat(), "last_run": {}}, index={"scanned_at": (dt.datetime(2026, 11, 3, 18, 40, tzinfo=M).astimezone(dt.timezone.utc) - dt.timedelta(minutes=3)).isoformat()}, bars=None, breadth=None)["ok"], True)
 print("FAILS:", fails)
 sys.exit(1 if fails else 0)
