@@ -8,6 +8,7 @@ S=/Users/christinatan/market-dashboard/scripts
 cd /Users/christinatan/cgi-vercel || exit 1
 echo "=== $(date '+%Y-%m-%d %H:%M:%S') ph_daily"
 $PY -u $S/ph_edge_build.py --days 4 --upload --notify || echo "edge build failed"
+$PY -u $S/ph_index_watch.py --upload --notify || echo "index watch failed"
 FULL=""
 [ "$(date +%u)" = "7" ] && FULL="--full"
 $PY -u $S/ph_prices_build.py $FULL --upload --notify || echo "prices build failed"

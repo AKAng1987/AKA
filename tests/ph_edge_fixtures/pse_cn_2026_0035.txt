@@ -1,0 +1,228 @@
+✓ INDEX REVIEW
+TO : INVESTING PUBLIC AND ALL MARKET PARTICIPANTS
+DATE : July 27, 2026
+SUBJECT : RESULTS OF THE REVIEW OF PSE INDICES
+The Philippine Stock Exchange is announcing the results of the regular review of the PSEi,
+PSE Dividend Yield (PSE DivY), PSE MidCap, and sector indices, covering trading activity for the
+period July 2025 to June 2026. The review of the composition of the indices was based on the
+Policy on Index Management.
+Summary of Changes in the PSE Indices’ Composition
+Index Companies Added Companies Removed
+PSEi MYNLD CNVRG
+PSE DivY AEV none
+PSE MidCap CNVRG and PX AUB
+Financials BNCOM and NRCP none
+Industrial BSC, MYNLD, and TOP CIC, PPC, and VITA
+Holding Firms LPZ none
+Property none VLL and VREIT
+Services none ALLDY and HOME
+Mining & Oil OV none
+Attached is a list of the companies that will comprise the PSEi, PSE DivY, PSE MidCap, and
+sector indices.
+All changes to the PSE Indices shall be effected on August 03, 2026.
+The list of index members and other index-related information can be accessed on a subscription
+basis through the Market Data Department at market.data@pse.com.ph.
+(Original Signed)
+RAMON S. MONZON
+President and CEO
+CN - No. 2026-0035
+PSEi
+Company Stock
+Code
+1 Ayala Corporation AC
+2 ACEN CORPORATION ACEN
+3 Aboitiz Equity Ventures, Inc. AEV
+4 Ayala Land, Inc. ALI
+5 AREIT, Inc. AREIT
+6 BDO Unibank, Inc. BDO
+7 Bank of the Philippine Islands BPI
+8 China Banking Corporation CBC
+9 Century Pacific Food, Inc. CNPF
+10 DMCI Holdings, Inc. DMC
+11 Emperador Inc. EMI
+12 Globe Telecom, Inc. GLO
+13 GT Capital Holdings, Inc. GTCAP
+14 International Container Terminal Services, Inc. ICT
+15 Jollibee Foods Corporation JFC
+16 JG Summit Holdings, Inc. JGS
+17 LT Group, Inc. LTG
+18 Metropolitan Bank & Trust Company MBT
+19 Manila Electric Company MER
+20 Monde Nissin Corporation MONDE
+21 Maynilad Water Services, Inc. MYNLD
+22 Puregold Price Club, Inc. PGOLD
+23 DigiPlus Interactive Corp. PLUS
+24 RL Commercial REIT, Inc. RCR
+25 Semirara Mining and Power Corporation SCC
+26 SM Investments Corporation SM
+27 San Miguel Corporation SMC
+28 SM Prime Holdings, Inc. SMPH
+29 PLDT Inc. TEL
+30 Universal Robina Corporation URC
+PSE DivY Index
+Company Stock
+Code
+1 Aboitiz Equity Ventures, Inc. AEV
+2 AREIT, Inc. AREIT
+3 China Banking Corporation CBC
+4 Citicore Energy REIT Corp. CREIT
+5 DMCI Holdings, Inc. DMC
+6 D&L Industries, Inc. DNL
+7 Globe Telecom, Inc. GLO
+8 LT Group, Inc. LTG
+9 Metropolitan Bank & Trust Company MBT
+10 Manila Electric Company MER
+11 MREIT, Inc. MREIT
+12 Nickel Asia Corporation NIKL
+13 OceanaGold (Philippines), Inc. OGP
+14 Puregold Price Club, Inc. PGOLD
+15 RL Commercial REIT, Inc. RCR
+16 Robinsons Land Corporation RLC
+17 Semirara Mining and Power Corporation SCC
+18 Synergy Grid & Development Phils., Inc. SGP
+19 PLDT Inc. TEL
+20 Universal Robina Corporation URC
+PSE MidCap Index
+Company Stock
+Code
+1 Alliance Global Group, Inc. AGI
+2 Apex Mining Co., Inc. APX
+3 Bloomberry Resorts Corporation BLOOM
+4 Converge Information and Communications
+Technology Solutions, Inc. CNVRG
+5 Cosco Capital, Inc. COSCO
+6 D&L Industries, Inc. DNL
+7 Ginebra San Miguel, Inc. GSMI
+8 The Keepers Holdings, Inc. KEEPR
+9 Megaworld Corporation MEG
+10 MREIT, Inc. MREIT
+11 Manila Water Company, Inc. MWC
+12 Nickel Asia Corporation NIKL
+13 OceanaGold (Philippines), Inc. OGP
+14 Philippine National Bank PNB
+15 Philex Mining Corporation PX
+16 Robinsons Land Corporation RLC
+17 Security Bank Corporation SECB
+18 Philippine Seven Corporation SEVN
+19 Synergy Grid & Development Phils., Inc. SGP
+20 Wilcon Depot, Inc. WLCON
+Financials Index
+Company Stock
+Code
+1 Asia United Bank Corporation AUB
+2 BDO Unibank, Inc. BDO
+3 Bank of Commerce BNCOM
+4 Bank of the Philippine Islands BPI
+5 China Banking Corporation CBC
+6 Metropolitan Bank & Trust Company MBT
+7 National Reinsurance Corporation of the
+Philippines NRCP
+8 Philippine National Bank PNB
+9 The Philippine Stock Exchange, Inc. PSE
+10 Security Bank Corporation SECB
+Industrial Index
+Company Stock
+Code
+1 ACEN CORPORATION ACEN
+2 Alternergy Holdings Corporation ALTER
+3 Basic Energy Corporation BSC
+4 Century Pacific Food, Inc. CNPF
+5 Citicore Renewable Energy Corporation CREC
+6 D&L Industries, Inc. DNL
+7 Emperador Inc. EMI
+8 Figaro Culinary Group, Inc. FCG
+9 First Philippine Holdings Corporation FPH
+10 Ginebra San Miguel, Inc. GSMI
+11 Integrated Micro-Electronics, Inc. IMI
+12 Ionics, Inc. ION
+13 Jollibee Foods Corporation JFC
+14 The Keepers Holdings, Inc. KEEPR
+15 Manila Electric Company MER
+16 Monde Nissin Corporation MONDE
+17 Manila Water Company, Inc. MWC
+18 Megawide Construction Corporation MWIDE
+19 Maynilad Water Services, Inc. MYNLD
+20 Petron Corporation PCOR
+21 Roxas and Company, Inc. RCI
+22 RFM Corporation RFM
+23 Semirara Mining and Power Corporation SCC
+24 Synergy Grid & Development Phils., Inc. SGP
+25 Shell Pilipinas Corporation SHLPH
+26 Cirtek Holdings Philippines Corporation TECH
+27 Top Line Business Development Corp. TOP
+28 Universal Robina Corporation URC
+Holding Firms Index
+Company Stock
+Code
+1 AbaCore Capital Holdings, Inc. ABA
+2 Ayala Corporation AC
+3 Aboitiz Equity Ventures, Inc. AEV
+4 Alliance Global Group, Inc. AGI
+5 Cosco Capital, Inc. COSCO
+6 DMCI Holdings, Inc. DMC
+7 GT Capital Holdings, Inc. GTCAP
+8 JG Summit Holdings, Inc. JGS
+9 Lopez Holdings Corporation LPZ
+10 LT Group, Inc. LTG
+11 SM Investments Corporation SM
+12 San Miguel Corporation SMC
+Property Index
+Company Stock
+Code
+1 Ayala Land, Inc. ALI
+2 AyalaLand Logistics Holdings Corp. ALLHC
+3 AREIT, Inc. AREIT
+4 Cebu Landmasters, Inc. CLI
+5 Century Properties Group Inc. CPG
+6 Citicore Energy REIT Corp. CREIT
+7 DoubleDragon Corporation DD
+8 DDMP REIT, Inc. DDMPR
+9 Filinvest REIT Corp. FILRT
+10 Filinvest Land, Inc. FLI
+11 Megaworld Corporation MEG
+12 MRC Allied, Inc. MRC
+13 MREIT, Inc. MREIT
+14 Premiere Island Power REIT Corporation PREIT
+15 RL Commercial REIT, Inc. RCR
+16 Robinsons Land Corporation RLC
+17 Shang Properties, Inc. SHNG
+18 SM Prime Holdings, Inc. SMPH
+Services Index
+Company Stock
+Code
+1 ABS-CBN Corporation ABS
+2 Belle Corporation BEL
+3 Bloomberry Resorts Corporation BLOOM
+4 Cebu Air, Inc. CEB
+5 Converge Information and Communications
+Technology Solutions, Inc. CNVRG
+6 Globe Telecom, Inc. GLO
+7 GMA Network, Inc. GMA7
+8 International Container Terminal Services, Inc. ICT
+9 MacroAsia Corporation MAC
+10 Now Corporation NOW
+11 Puregold Price Club, Inc. PGOLD
+12 DigiPlus Interactive Corp. PLUS
+13 Philippine Seven Corporation SEVN
+14 SSI Group, Inc. SSI
+15 STI Education Systems Holdings, Inc. STI
+16 PLDT Inc. TEL
+17 Philweb Corporation WEB
+18 Wilcon Depot, Inc. WLCON
+Mining & Oil Index
+Company Stock
+Code
+1 Apex Mining Co., Inc. APX
+2 Atlas Consolidated Mining and Development
+Corporation AT
+3 Benguet Corporation "A" BC
+Benguet Corporation "B" BCB
+4 Global Ferronickel Holdings, Inc. FNI
+5 Lepanto Consolidated Mining Company "A" LC
+Lepanto Consolidated Mining Company "B" LCB
+6 Marcventures Holdings, Inc. MARC
+7 Nickel Asia Corporation NIKL
+8 OceanaGold (Philippines), Inc. OGP
+9 The Philodrill Corporation OV
+10 Philex Mining Corporation PX
+11 PXP Energy Corporation PXP

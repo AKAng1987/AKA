@@ -259,6 +259,24 @@ def yoy(cur: Optional[float], prev: Optional[float]) -> Optional[float]:
 
 
 DETAIL_CHIPS = {"material", "dividend", "insider", "corporate", "ownership"}
+INDEX_RE = re.compile(r"\b(MSCI|FTSE|WisdomTree|S&P\s*/?\s*PSE|PSEi|index\s+(?:inclusion|review|rebalanc\w*|constituent\w*))", re.I)
+
+
+def is_index_news(text: str) -> bool:
+    """A disclosure whose subject or title mentions an index provider or an index inclusion: it gets the Index chip."""
+    return bool(INDEX_RE.search(text or ""))
+
+
+def pdf_text(path: str) -> str:
+    """Text of a PDF through macOS PDFKit (scripts/pdf_text.swift); empty when swift is not available."""
+    import os
+    import subprocess
+
+    try:
+        r = subprocess.run(["swift", os.path.join(os.path.dirname(__file__), "pdf_text.swift"), path], capture_output=True, text=True, timeout=120)
+        return r.stdout
+    except Exception:  # noqa: BLE001
+        return ""
 
 
 def parse_detail(html: str, chip_name: str) -> dict:

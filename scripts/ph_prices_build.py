@@ -28,8 +28,10 @@ HISTORY_DAYS = 560           # EMA200 and a year-to-date base need about 14 mont
 LIQ_KEEP = 1_000_000         # rows kept in the snapshot (the page shows >= 5M; the floor lets a name enter the list)
 LIQ_PAGE = 5_000_000
 BARS_KEEP = 300              # sessions of daily bars kept for the page's chart dock (EMA200 needs the warm-up)
-# Names Arvin asked for by name: always in the snapshot and on the page, whatever they trade (COL Financial, CTS Global Equity).
-PINNED = ("COL", "CTS")
+# Names Arvin asked for by name: always in the snapshot and in the page's lists (leaderboard, segments, scanner), whatever they trade
+# (COL Financial, CTS Global Equity). The row carries extra=1; the page tags them "below the liquid line" in the scanner.
+EXTRA_NAMES = ("COL", "CTS")
+TRADING_CLOSE_MANILA = dt.time(15, 5)      # the PSE closes at 15:00 (closing auction 14:57-15:00): a run before this must not store today's bar
 STOCK_PAGE_DAYS = 7
 a_notify = False
 
@@ -73,8 +75,16 @@ def calendar_returns(dates: list[str], closes: list[float]) -> dict:
 
     def ret(b):
         return round((c / b - 1) * 100, 2) if b else None
-    return {"w": ret(base(last - dt.timedelta(days=7))), "m": ret(base(months_back(last, 1))), "q": ret(base(months_back(last, 3))),
+    prev_close = closes[-2] if len(closes) > 1 else None
+    return {"d": round((c / prev_close - 1) * 100, 2) if prev_close else None, "w": ret(base(last - dt.timedelta(days=7))), "m": ret(base(months_back(last, 1))), "q": ret(base(months_back(last, 3))),
             "y": ret(base(dt.date(last.year, 1, 1), strict=True))}
+
+
+def drop_open_session(bars: list[dict], now_manila: dt.datetime) -> list[dict]:
+    """On a weekday before 15:05 Manila the day's bar is a session in progress, not a close: leave it out."""
+    if bars and now_manila.weekday() < 5 and now_manila.time() < TRADING_CLOSE_MANILA and bars[-1]["date"] == now_manila.date().isoformat():
+        return bars[:-1]
+    return bars
 
 
 def metrics(bars: list[dict], today: dt.date, max_stale: int = 10) -> dict | None:
@@ -183,14 +193,15 @@ def psei_index(prev: dict | None, seed: dict | None) -> tuple[dict, dict, dict |
     return {"c": hist[dates[-1]], **calendar_returns(dates, list(hist.values())), "date": dates[-1], "n_history": len(dates)}, hist
 
 
-def build(prev: dict | None, directory: dict, full: bool, seed: dict | None = None, log=print) -> tuple[dict, dict, dict | None]:
+def build(prev: dict | None, directory: dict, full: bool, seed: dict | None = None, psei_members: list[str] | None = None, log=print) -> tuple[dict, dict, dict | None]:
     """directory: the EDGE snapshot's {symbol: {cmpy_id, security_id, name, sector, subsector}}."""
-    today = dt.datetime.now(dt.timezone(dt.timedelta(hours=8))).date()
+    now_manila = dt.datetime.now(dt.timezone(dt.timedelta(hours=8)))
+    today = now_manila.date()
     prev_rows = {r["s"]: r for r in (prev or {}).get("rows", [])}
     if full or not prev_rows:
         todo = sorted(directory)
     else:
-        todo = sorted({s for s, r in prev_rows.items() if (r.get("v30") or 0) >= LIQ_KEEP * 0.5 and s in directory} | {p for p in PINNED if p in directory})
+        todo = sorted({s for s, r in prev_rows.items() if (r.get("v30") or 0) >= LIQ_KEEP * 0.5 and s in directory} | {p for p in EXTRA_NAMES if p in directory})
     log(f"{len(todo)} companies to read ({'full' if full or not prev_rows else 'daily set'})")
     rows, failed, suspended = [], [], 0
     bars_out: dict[str, list] = {}
@@ -201,17 +212,17 @@ def build(prev: dict | None, directory: dict, full: bool, seed: dict | None = No
         if not d.get("security_id"):
             continue
         try:
-            bars = E.fetch_chart(d["cmpy_id"], d["security_id"], start, today)
-            m = metrics(bars, today, 400 if sym in PINNED else 10)       # a pinned name that trades once a fortnight still shows
+            bars = drop_open_session(E.fetch_chart(d["cmpy_id"], d["security_id"], start, today), now_manila)
+            m = metrics(bars, today, 400 if sym in EXTRA_NAMES else 10)       # a pinned name that trades once a fortnight still shows
         except Exception as e:  # noqa: BLE001
             failed.append({"s": sym, "why": str(e)[:80]})
             continue
         if m is None:
             suspended += 1
             continue
-        if m["v30"] >= LIQ_KEEP or sym in PINNED:
-            rows.append({"s": sym, **m, "ind": d.get("subsector"), "sec": d.get("sector"), "psei": 1 if sym in PSEI_MEMBERS else 0,
-                         "pinned": 1 if sym in PINNED else 0})
+        if m["v30"] >= LIQ_KEEP or sym in EXTRA_NAMES:
+            rows.append({"s": sym, **m, "ind": d.get("subsector"), "sec": d.get("sector"), "psei": 1 if sym in (psei_members or PSEI_MEMBERS) else 0,
+                         "extra": 1 if sym in EXTRA_NAMES else 0})
             full_bars[sym] = bars
             bars_out[sym] = [[b["date"], b["open"], b["high"], b["low"], b["close"], round(b["value"])] for b in bars[-BARS_KEEP:]]
         if i % 25 == 24:
@@ -221,7 +232,7 @@ def build(prev: dict | None, directory: dict, full: bool, seed: dict | None = No
     for r in rows:
         old = prev_rows.get(r["s"], {})
         fresh = old.get("float_at") and (today - dt.date.fromisoformat(old["float_at"])).days < STOCK_PAGE_DAYS
-        if fresh or (r["v30"] < LIQ_PAGE and not r.get("pinned")):
+        if fresh or (r["v30"] < LIQ_PAGE and not r.get("extra")):
             r.update({k: old.get(k) for k in ("fl", "outstanding", "float_at")})
         else:
             try:
@@ -277,7 +288,11 @@ def main() -> int:
             for d in E.fetch_directory():
                 if d["symbol"] in directory:
                     directory[d["symbol"]]["security_id"] = d["security_id"]
-        snap, bars_blob, breadth = build(prev, directory, a.full, json.load(open(a.psei_seed)) if a.psei_seed else None)
+        try:
+            members = (ph_data.read_blob("index") or {}).get("psei_members") if a.upload else None      # from the PSE circular watcher
+        except Exception:  # noqa: BLE001
+            members = None
+        snap, bars_blob, breadth = build(prev, directory, a.full, json.load(open(a.psei_seed)) if a.psei_seed else None, members)
     except Exception as e:  # noqa: BLE001
         return _fail(f"PH prices build failed: {e}")
     lr = snap["last_run"]

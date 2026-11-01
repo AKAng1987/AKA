@@ -103,6 +103,8 @@ def build(prev: dict | None, days: int, max_filings: int, history: bool = False,
         old = prev_by.get(d["edge_no"])
         if old:
             d.update({k: old[k] for k in ("subject", "dividend", "insider") if k in old})
+            if old.get("chip") == "index":
+                d["chip"] = "index"
     detail_cut = (today - dt.timedelta(days=detail_days)).isoformat()
     need = sorted((d for d in disclosures if d["chip"] in E.DETAIL_CHIPS and "subject" not in d and d["announced"][:10] >= detail_cut),
                   key=lambda d: d["announced"], reverse=True)
@@ -110,6 +112,8 @@ def build(prev: dict | None, days: int, max_filings: int, history: bool = False,
     for d in need[:300]:
         try:
             d.update(E.parse_detail(E.fetch_filing(d["edge_no"]), d["chip"]))
+            if d["chip"] in ("material", "corporate", "press") and E.is_index_news(f'{d.get("subject", "")} {d["title"]}'):
+                d["chip"] = "index"
             n_detail += 1
         except Exception:  # noqa: BLE001 -- the row stays, with its generic title, and is tried again next run
             n_detail_failed += 1
