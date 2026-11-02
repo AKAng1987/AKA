@@ -173,19 +173,41 @@ def breadth_blob(all_bars: dict[str, list[dict]], universe: list[str], built_at:
             "series": series, "gauges": out_g}
 
 
-def psei_index(prev: dict | None, seed: dict | None) -> tuple[dict, dict, dict | None]:
-    """PSEi: Yahoo (PSEI.PS) serves only the latest close, so the history is kept in the snapshot, seeded once from
-    data_manual/psei_history_seed_*.json and extended by each run. Returns (index summary, history)."""
+def psei_from_edge(hist: dict, asof: str) -> float | None:
+    """PSEi close from EDGE's home page (the Lambda has no Yahoo library). The page shows no date, so it is accepted only when its own
+    % change agrees with the move from the previous stored close to this value: a page still showing yesterday's close fails that test."""
+    try:
+        h = E.parse_home_psei(E.get("/"))
+    except Exception as e:  # noqa: BLE001
+        print("PSEi from EDGE home failed:", str(e)[:100])
+        return None
+    prevs = [(d, v) for d, v in sorted(hist.items()) if d < asof]
+    if not h or not prevs:
+        return None
+    expect = (h["value"] / prevs[-1][1] - 1) * 100
+    if abs(expect - h["pct"]) > 0.03:
+        print(f"PSEi on the EDGE home page ({h['value']}, {h['pct']:+.2f}%) does not match the move from {prevs[-1][0]} ({expect:+.2f}%): not stored")
+        return None
+    return h["value"]
+
+
+def psei_index(prev: dict | None, seed: dict | None, asof: str | None = None) -> tuple[dict, dict]:
+    """PSEi: the history is kept in the snapshot (seeded once from data_manual/psei_history_seed_*.json) and extended each run with the close for `asof`,
+    read from EDGE's home page (checked against the previous close), or from Yahoo PSEI.PS when the Yahoo library is installed. Returns (summary, history)."""
     hist = dict((prev or {}).get("psei_history") or {})
     hist.update((seed or {}).get("psei_history") or {})
-    try:
-        import yfinance as yf
+    got = psei_from_edge(hist, asof) if asof else None
+    if got is not None:
+        hist[asof] = round(got, 2)
+    else:
+        try:
+            import yfinance as yf
 
-        h = yf.Ticker("PSEI.PS").history(period="5d", interval="1d")["Close"].dropna()
-        for d, v in zip(h.index, h):
-            hist[d.date().isoformat()] = round(float(v), 2)
-    except Exception as e:  # noqa: BLE001
-        print("PSEi from Yahoo failed:", str(e)[:100])
+            h = yf.Ticker("PSEI.PS").history(period="5d", interval="1d")["Close"].dropna()
+            for d, v in zip(h.index, h):
+                hist[d.date().isoformat()] = round(float(v), 2)
+        except Exception as e:  # noqa: BLE001
+            print("PSEi from Yahoo not available:", str(e)[:80])
     hist = dict(sorted(hist.items())[-420:])
     if not hist:
         return {}, hist
@@ -245,7 +267,7 @@ def build(prev: dict | None, directory: dict, full: bool, seed: dict | None = No
         r["mc"] = round(r["c"] * r["outstanding"], 0) if r.get("outstanding") else None
         r.setdefault("fl", None)
     asof = max((r["last_date"] for r in rows), default=None)
-    index, index_history = psei_index(prev, seed)
+    index, index_history = psei_index(prev, seed, asof)
     snap = {"built_at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"), "asof": asof, "psei_index": index, "psei_history": index_history,
             "rows": sorted(rows, key=lambda r: -(r["v30"] or 0)),
             "last_run": {"mode": "full" if full or not prev_rows else "daily", "tried": len(todo), "kept": len(rows), "suspended": suspended,

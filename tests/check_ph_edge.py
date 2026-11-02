@@ -92,5 +92,8 @@ check("insider position", ins["position"], "Chairman of the Board")
 check("hand-typed dates", [e._date(x) for x in ("Oct. 19, 2026", "Aug12, 2026", "July 24, 2026", "Sept 3, 2026", "Oct 28, 2026", "n/a")],
       ["2026-10-19", "2026-08-12", "2026-07-24", "2026-09-03", "2026-10-28", None])
 check("index news detector", [e.is_index_news(x) for x in ("Inclusion in the MSCI Philippines Index", "FTSE All-World review", "Declaration of dividends", "WisdomTree index change", "PSEi inclusion of ABC", "Index fund launch")], [True, True, False, True, True, False])
+hp = e.parse_home_psei(fx("home.html"))
+check("EDGE home PSEi row: value, signed change and %", (hp["value"], hp["chg"], hp["pct"]), (5680.35, -25.23, -0.44))
+check("EDGE home without the row", e.parse_home_psei("<table><tr><td>x</td></tr></table>"), None)
 print("FAILS:", fails)
 sys.exit(1 if fails else 0)

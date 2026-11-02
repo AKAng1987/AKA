@@ -16,7 +16,9 @@ from typing import Optional
 
 BASE = "https://edge.pse.com.ph"
 UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
-PAUSE = 2.0
+import os as _os
+
+PAUSE = float(_os.environ.get("PH_PAUSE", "2.0"))     # seconds between requests: 2.0 on the Mac; the Lambda sets a shorter pause
 
 # disclosure form -> chip. Anything not listed is "other"; the EDGE form number is stable, the title is not.
 CHIPS = {
@@ -268,10 +270,17 @@ def is_index_news(text: str) -> bool:
 
 
 def pdf_text(path: str) -> str:
-    """Text of a PDF through macOS PDFKit (scripts/pdf_text.swift); empty when swift is not available."""
+    """Text of a PDF: pypdf when installed (the Lambda bundles it; the same text the PSE circular parser was written against), else macOS
+    PDFKit through scripts/pdf_text.swift; empty when neither is available."""
     import os
     import subprocess
 
+    try:
+        from pypdf import PdfReader
+
+        return "\n".join((p.extract_text() or "") for p in PdfReader(path).pages)
+    except ImportError:
+        pass
     try:
         r = subprocess.run(["swift", os.path.join(os.path.dirname(__file__), "pdf_text.swift"), path], capture_output=True, text=True, timeout=120)
         return r.stdout
@@ -477,6 +486,20 @@ def parse_stock_page(html: str) -> dict:
     pct = lambda v: num((v or "").replace("%", ""))
     return {"outstanding": num(cells.get("Outstanding Shares", "")), "free_float": pct(cells.get("Free Float Level(%)")),
             "last": num(cells.get("Last Traded Price", "")), "hi52": num(cells.get("52-Week High", "")), "lo52": num(cells.get("52-Week Low", ""))}
+
+
+def parse_home_psei(html: str) -> Optional[dict]:
+    """The PSEi row of the Index Summary on EDGE's home page: value, change and % change (signed by the arrow). No date is shown."""
+    for t in tables(html):
+        for r in t:
+            texts = [c["text"] for c in r]
+            if len(texts) >= 4 and texts[0] == "PSEi":
+                value, chg, pct = num(texts[1]), num(texts[2]), num(texts[3].replace("▼", "").replace("▲", ""))
+                if value is None or chg is None or pct is None:
+                    return None
+                down = "▼" in texts[3]
+                return {"value": value, "chg": -abs(chg) if down else abs(chg), "pct": -abs(pct) if down else abs(pct)}
+    return None
 
 
 def link(edge_no: str) -> str:

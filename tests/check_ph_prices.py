@@ -70,5 +70,12 @@ check("run check: today's bar missing is a problem that says holiday or lag with
 check("run check: snapshots not stored by this run", [m for m in R.assess(tue_1520, "daily", **dict(good, edge={"built_at": iso(600)}))["messages"]], ["EDGE snapshot was not stored by this run"])
 check("run check: many filings failing to parse", R.assess(tue_1520, "daily", **dict(good, edge={"built_at": iso(3), "last_run": {"filings_tried": 10, "n_failed": 6}}))["messages"][0][:2], "6 ")
 check("run check: the evening edge-only run does not need prices", R.assess(dt.datetime(2026, 11, 3, 18, 40, tzinfo=M), "edge", screener=None, edge={"built_at": (dt.datetime(2026, 11, 3, 18, 40, tzinfo=M).astimezone(dt.timezone.utc) - dt.timedelta(minutes=4)).isoformat(), "last_run": {}}, index={"scanned_at": (dt.datetime(2026, 11, 3, 18, 40, tzinfo=M).astimezone(dt.timezone.utc) - dt.timedelta(minutes=3)).isoformat()}, bars=None, breadth=None)["ok"], True)
+# PSEi from the EDGE home page is accepted only when its % change agrees with the move from the previous stored close
+home = open(os.path.join(os.path.dirname(__file__), "ph_edge_fixtures", "home.html"), encoding="utf-8", errors="replace").read()
+P.E.get = lambda path, retries=2: home
+hist = {"2026-10-29": 5705.58, "2026-10-30": 5680.35}
+check("PSEi from EDGE home: matches the move into 30 Oct", P.psei_from_edge(hist, "2026-10-30"), 5680.35)
+check("PSEi from EDGE home: a page still showing the old close is refused for 2 Nov", P.psei_from_edge(hist, "2026-11-02"), None)
+check("PSEi from EDGE home: no previous close, no answer", P.psei_from_edge({}, "2026-10-30"), None)
 print("FAILS:", fails)
 sys.exit(1 if fails else 0)
