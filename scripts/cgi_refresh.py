@@ -239,6 +239,70 @@ def calendar_plan() -> int:
     return 0
 
 
+# ── BSP decision notes ──────────────────────────────────────────────────────
+# The BSP's site refuses scripts, so what the Monetary Board said is read by the model from TradingView. This only decides WHEN:
+# a meeting 0-10 days old with no stored note makes `plan` print a "bsp_note_due" item; otherwise nothing, so quiet days cost no tokens.
+# Keep BSP_MEETINGS in step with api/release_calendar._BSP (bsp.gov.ph schedule; 2027 not published yet).
+BSP_MEETINGS = ["2026-02-19", "2026-04-23", "2026-06-18", "2026-08-27", "2026-10-22", "2026-12-17"]
+BSP_NOTE_WINDOW_DAYS = 10
+
+
+def bsp_note_due(today: dt.date, note_dates: list[str], meetings: list[str] = BSP_MEETINGS) -> dict | None:
+    """The newest meeting 0-10 days old that has no note within a day of it, or None."""
+    for d in sorted(meetings, reverse=True):
+        try:
+            age = (today - dt.date.fromisoformat(d)).days
+        except ValueError:
+            continue
+        if not 0 <= age <= BSP_NOTE_WINDOW_DAYS:
+            continue
+        if any(abs((dt.date.fromisoformat(n[:10]) - dt.date.fromisoformat(d)).days) <= 1 for n in note_dates):
+            return None
+        return {"meeting": d, "age_days": age}
+    return None
+
+
+def bsp_plan_item(today: dt.date) -> dict | None:
+    try:
+        notes = [n["date"] for n in (_get("/api/ph").get("bsp") or {}).get("notes", [])]
+    except Exception as exc:  # noqa: BLE001
+        print(f"# bsp: could not read stored notes ({type(exc).__name__}); skipping", file=sys.stderr)
+        return None
+    due = bsp_note_due(today, notes)
+    if not due:
+        return None
+    return {**due,
+            "do": ("TradingView (verified 2026-11-02): mcp-tv-get-news with symbol ECONOMICS:PHINTR, limit 5; take the Trading Economics headline "
+                   "dated the meeting day (e.g. 'Philippine Central Bank Hikes Interest Rate to 5.5%'); read it with mcp-tv-get-news-story "
+                   "(parameter: id, e.g. te_news:594086:0). Rate, change and decision come from its first sentence; lines = 1-3 of the other "
+                   "sentences (inflation outlook, risks, activity), each under 160 characters, copied or shortened, not added to. "
+                   "source_url = the headline's link. If no story is dated the meeting day yet, skip: this item returns tomorrow."),
+            "send_in_apply_as": '"_bsp_notes": [{"date": "YYYY-MM-DD", "decision": "hike|cut|hold", "rate": 5.5, "change_bp": 50, '
+                                '"lines": ["..."], "source_url": "https://..."}]',
+            "note": "decision/rate/change must agree with PH_POLICY_RATE; if the story is not found yet, skip: this item returns tomorrow"}
+
+
+def clean_bsp_post(rows) -> list[dict]:
+    """Same limits as api/ph_data.clean_bsp_notes, so a bad row is dropped here with a reason rather than refused by the API."""
+    out = []
+    for r in rows if isinstance(rows, list) else []:
+        try:
+            dec = str(r["decision"]).lower()
+            rate, bp = float(r["rate"]), float(r["change_bp"])
+            dt.date.fromisoformat(str(r["date"])[:10])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if dec not in ("hike", "cut", "hold") or not 0 <= rate <= 25 or abs(bp) > 300:
+            continue
+        if (dec == "hold") != (bp == 0) or (dec == "hike" and bp < 0) or (dec == "cut" and bp > 0):
+            continue                      # decision word and sign of the change must agree
+        lines = [str(x).strip()[:160] for x in (r.get("lines") or []) if str(x).strip()][:3]
+        url = str(r.get("source_url") or "")
+        out.append({"date": str(r["date"])[:10], "decision": dec, "rate": rate, "change_bp": int(bp), "lines": lines,
+                    "source_url": url if url.startswith("https://") else ""})
+    return out
+
+
 def plan() -> int:
     """What to fetch. Everything else the model would have had to work out."""
     f = _get("/api/freshness")
@@ -273,8 +337,11 @@ def plan() -> int:
                 pass
         out.append({"symbol": sym, "fetch": r["source_symbol"],
                     "we_hold": r["ours_date"], "cadence": r["cadence"]})
-    print(json.dumps({"api": API, "n": len(out), "skipped_checked_recently": skipped,
-                      "fetch": out}, indent=1))
+    result = {"api": API, "n": len(out), "skipped_checked_recently": skipped, "fetch": out}
+    bsp = bsp_plan_item(today)
+    if bsp:
+        result["bsp_note_due"] = bsp
+    print(json.dumps(result, indent=1))
     if not out:
         print("\n# nothing due -- still run `apply` with {} to record the heartbeat",
               file=sys.stderr)
@@ -345,6 +412,19 @@ def apply_() -> int:
             cal_note = f"calendar FAILED: HTTP {exc.code} {exc.read().decode()[:120]}"
         except Exception as exc:  # noqa: BLE001
             cal_note = f"calendar FAILED: {type(exc).__name__} {exc}"
+    bsp_rows = fetched.pop("_bsp_notes", None)
+    if isinstance(bsp_rows, list) and bsp_rows:
+        good = clean_bsp_post(bsp_rows)
+        if not good:
+            cal_note += (" | " if cal_note else "") + "bsp note FAILED: no valid row (decision word, sign of change, rate)"
+        else:
+            try:
+                res = _post("/api/ph/bsp_notes", {"notes": good})
+                cal_note += (" | " if cal_note else "") + f"bsp notes: {res.get('report', {}).get('kept', '?')} stored"
+            except urllib.error.HTTPError as exc:
+                cal_note += (" | " if cal_note else "") + f"bsp note FAILED: HTTP {exc.code} {exc.read().decode()[:120]}"
+            except Exception as exc:  # noqa: BLE001
+                cal_note += (" | " if cal_note else "") + f"bsp note FAILED: {type(exc).__name__} {exc}"
     referee = {}
     for sym, bars in raw_ref.items():
         if sym in REFEREE and isinstance(bars, list):
