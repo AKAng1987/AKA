@@ -173,9 +173,21 @@ def breadth_blob(all_bars: dict[str, list[dict]], universe: list[str], built_at:
             "series": series, "gauges": out_g}
 
 
+def home_session(now: dt.datetime) -> str:
+    """The session EDGE's home page should show: today once the close has passed (15:10 Manila) on a weekday, else the last weekday before today.
+    The home page runs ahead of the stock bars (EDGE publishes the day's bars a day later), so this can be later than the bars' asof."""
+    d = now.date()
+    if not (now.weekday() < 5 and now.time() >= dt.time(15, 10)):
+        d -= dt.timedelta(days=1)
+        while d.weekday() >= 5:
+            d -= dt.timedelta(days=1)
+    return d.isoformat()
+
+
 def psei_from_edge(hist: dict, asof: str) -> float | None:
     """PSEi close from EDGE's home page (the Lambda has no Yahoo library). The page shows no date, so it is accepted only when its own
-    % change agrees with the move from the previous stored close to this value: a page still showing yesterday's close fails that test."""
+    % change agrees with the move from the previous stored close (before `asof`, the session being tested) to this value: a page still
+    showing yesterday's close fails that test."""
     try:
         h = E.parse_home_psei(E.get("/"))
     except Exception as e:  # noqa: BLE001
@@ -191,14 +203,22 @@ def psei_from_edge(hist: dict, asof: str) -> float | None:
     return h["value"]
 
 
-def psei_index(prev: dict | None, seed: dict | None, asof: str | None = None) -> tuple[dict, dict]:
+def psei_index(prev: dict | None, seed: dict | None, asof: str | None = None, now: dt.datetime | None = None) -> tuple[dict, dict]:
     """PSEi: the history is kept in the snapshot (seeded once from data_manual/psei_history_seed_*.json) and extended each run with the close for `asof`,
     read from EDGE's home page (checked against the previous close), or from Yahoo PSEI.PS when the Yahoo library is installed. Returns (summary, history)."""
     hist = dict((prev or {}).get("psei_history") or {})
     hist.update((seed or {}).get("psei_history") or {})
-    got = psei_from_edge(hist, asof) if asof else None
+    # Try the session the page should show now (it runs ahead of the bars), then the bars' own date (a holiday today leaves the page on the last session).
+    now = now or dt.datetime.now(dt.timezone(dt.timedelta(hours=8)))
+    got, day = None, None
+    for day in dict.fromkeys([home_session(now), asof] if asof else []):
+        if asof and day < asof:
+            continue
+        got = psei_from_edge(hist, day)
+        if got is not None:
+            break
     if got is not None:
-        hist[asof] = round(got, 2)
+        hist[day] = round(got, 2)
     else:
         try:
             import yfinance as yf

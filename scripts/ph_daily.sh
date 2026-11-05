@@ -11,10 +11,11 @@ PY=/Users/christinatan/cgi-vercel/api/.venv/bin/python
 S=/Users/christinatan/market-dashboard/scripts
 cd /Users/christinatan/cgi-vercel || exit 1
 DOW=$(date +%u)
+START=$(date -u +%Y-%m-%dT%H:%M:%SZ)   # run check counts a snapshot as stored by this run if written after this, however long the run takes
 echo "=== $(date '+%Y-%m-%d %H:%M:%S') ph_daily (weekday $DOW)"
 $PY -u $S/ph_edge_build.py --days 4 --upload --notify || echo "edge build failed"
 $PY -u $S/ph_index_watch.py --upload --notify || echo "index watch failed"
 FULL=""
 [ "$DOW" = "6" ] && FULL="--full"
 $PY -u $S/ph_prices_build.py $FULL --upload --notify || echo "prices build failed"
-$PY -u $S/ph_run_check.py --mode daily --notify || echo "run check found a problem (see above)"
+$PY -u $S/ph_run_check.py --mode daily --since "$START" --notify || echo "run check found a problem (see above)"
