@@ -15,7 +15,10 @@ between the two copies is visible in the record rather than silent.
 Market reads (all best-effort; a missing read stores null, never raises):
   liquidity  <- s3://<reports>/Cache/macro/fomc_probabilities.json, the
                 MACRO tab's cached fed-funds-futures computation (FedWatch
-                method). flip = p_hike when easing, p_cut when tightening.
+                method). flip = p_hike when easing, 1 - p_hike (a hold or a
+                cut) when tightening: the compass calls only a hike
+                Tightening (update_compass_model.py). p_cut alone was used
+                until 2026-11-06 and stored 0% for the 28 Oct 2026 hold.
   credit,    <- previous day's regime-signals row, experimental_divergence
   inflation     (written 01:05 UTC by regime-divergence-updater, so at
                 00:55 the latest is yesterday's). flip = 1 - P(up) when up.
@@ -118,6 +121,12 @@ def flip_rates(model: str, rows: list[dict], today: str) -> dict:
     return out
 
 
+def liquidity_flip_p(p: dict, state: int) -> float:
+    """Same rule as ~/cgi-vercel/api/markov_data.liquidity_flip_p: easing (1) flips only on a hike; tight (0) flips on
+    a hold or a cut, 1 - P(hike). scripts/check_markov_events_liquidity.py keeps the two copies equal."""
+    return float(p["p_hike"]) if state == 1 else float(p["p_hold"]) + float(p["p_cut"])
+
+
 def _market_liquidity(fomc_date: str, state: int) -> Optional[dict]:
     try:
         body = _s3.get_object(Bucket=REPORTS_BUCKET, Key=FOMC_PROBS_KEY)["Body"].read()
@@ -127,11 +136,14 @@ def _market_liquidity(fomc_date: str, state: int) -> Optional[dict]:
         return None
     for p in probs.get("probabilities", []):
         if p.get("date") == fomc_date:
-            p_flip = p["p_hike"] if state == 1 else p["p_cut"]
+            p_flip = liquidity_flip_p(p, state)
+            last = probs.get("last_move") or {}
+            smaller = (f" · smaller hike than the last {last['bp']}bp {round(float(p['p_smaller_hike']) * 100)}%"
+                       if p.get("p_smaller_hike") is not None and last.get("bp") else "")
             return {
                 "p_flip": round(float(p_flip), 3),
                 "source": "fed funds futures (FedWatch method)",
-                "detail": f"hike {round(p['p_hike']*100)} / hold {round(p['p_hold']*100)} / cut {round(p['p_cut']*100)}",
+                "detail": f"hike {round(p['p_hike']*100)} / hold {round(p['p_hold']*100)} / cut {round(p['p_cut']*100)}{smaller}",
                 "experimental": False,
             }
     print(f"[markov_events] no fomc_probabilities entry for {fomc_date}")
