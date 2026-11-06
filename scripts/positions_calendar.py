@@ -104,6 +104,19 @@ def exit_from_text(text: str, today: dt.date):
     return None
 
 
+def plan_exit(p: dict, today: dt.date):
+    """The plan's own exit_by field first (set on the plan form); else the first explicit date in its text.
+    Returns (date, source, snippet) or None. source is 'exit_by' or 'text'."""
+    xb = p.get("exit_by")
+    if xb and re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(xb)):
+        try:
+            return dt.date.fromisoformat(xb), "exit_by", None
+        except ValueError:
+            pass
+    ex = exit_from_text(" ".join(str(p.get(k) or "") for k in ("wrong", "feeling")), today)
+    return (ex[0], "text", ex[1]) if ex else None
+
+
 def macro_rows(book: str, today: dt.date, fresh: dict | None, ph: dict | None) -> list[dict]:
     """Next release per type for the book's macro (any distance: they are the ones that move it)."""
     rows = []
@@ -230,9 +243,9 @@ def build(today: dt.date, plans: list[dict], results: dict, meta: dict, fresh: d
             if book == "PH":
                 evs, _ = company_events(sym, today, ph)
                 items += [(e["date"], e["kind"], e["label"]) for e in evs]
-            ex = exit_from_text(" ".join(str(p.get(k) or "") for k in ("wrong", "feeling")), today)
+            ex = plan_exit(p, today)
             if ex and 0 <= (ex[0] - today).days <= HORIZON:
-                items.append((ex[0], "own exit", f"exit, from your text: \"{ex[1]}\""))
+                items.append((ex[0], "own exit", "exit by (set on your plan)" if ex[1] == "exit_by" else f"exit, from your text: \"{ex[2]}\""))
             items.sort(key=lambda i: i[0])
             for d, kind, label in items:
                 soon = 0 <= trading_days_away(today, d) <= SOON_TRADING_DAYS and d >= today
@@ -245,7 +258,7 @@ def build(today: dt.date, plans: list[dict], results: dict, meta: dict, fresh: d
             if not ex:
                 L.append("      exit date: not stated")
             elif not (0 <= (ex[0] - today).days <= HORIZON):
-                L.append(f"      exit, from your text: {ex[0].isoformat()} ({rel_day(today, ex[0])}), outside the window")
+                L.append(f"      exit {'by (set on your plan)' if ex[1] == 'exit_by' else 'from your text'}: {ex[0].isoformat()} ({rel_day(today, ex[0])}), outside the window")
             for m in macro:
                 soon = trading_days_away(today, m["date"]) <= SOON_TRADING_DAYS
                 n_soon += 1 if soon else 0

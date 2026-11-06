@@ -111,5 +111,17 @@ check("stale PH calendar said in the header", "PH macro calendar last refreshed 
 text4, _ = P.build(today, [], {}, meta, None, None, ["could not read /api/ph: boom"], now)
 check("unreadable sources reported, empty books say so", ("unreadable" in text4, "PH: no live plans" in text4, "US: no live plans" in text4, "boom" in text4), (True, True, True, True))
 
+# exit_by on the plan wins over text
+pe = P.plan_exit({"exit_by": "2026-11-12", "wrong": "out by 20 Nov"}, today)
+check("exit_by field wins over text", (pe[0].isoformat(), pe[1]), ("2026-11-12", "exit_by"))
+check("text used when no exit_by", P.plan_exit({"wrong": "out by 20 Nov"}, today)[1], "text")
+check("bad exit_by ignored", P.plan_exit({"exit_by": "soon"}, today), None)
+t5, n5 = P.build(today, [{"id": "X", "symbol": "XXX", "book": "PH", "status": "planned", "plan_ts": "2026-11-05T00:00:00Z", "entry": 1, "stop": .9,
+                          "exit_by": "2026-11-09"}], {}, meta, fresh, ph, [], now)
+check("exit_by in window listed with '!' and the plan source", ("exit by (set on your plan)" in t5, "! 2026-11-09" in t5), (True, True))
+t6, _ = P.build(today, [{"id": "X", "symbol": "XXX", "book": "PH", "status": "planned", "plan_ts": "2026-11-05T00:00:00Z", "entry": 1, "stop": .9,
+                         "exit_by": "2027-03-01"}], {}, meta, fresh, ph, [], now)
+check("exit_by outside the window said so", "outside the window" in t6, True)
+
 print("FAILS:", fails)
 sys.exit(1 if fails else 0)
