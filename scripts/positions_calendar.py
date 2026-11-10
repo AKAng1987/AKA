@@ -32,7 +32,6 @@ MIRROR_STALE_H = 26
 CAL_STALE_DAYS = 8
 
 AXIS = {"FOMC": "liquidity", "SLOOS": "credit", "CPI": "inflation", "GDP": "growth"}
-MONTHS = {m: i + 1 for i, m in enumerate(["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"])}
 RESULT_WORDS = ("result", "net income", "financial and operating", "earnings")
 
 
@@ -71,50 +70,16 @@ def live_plans(plans: list[dict], results: dict[str, dict]) -> list[dict]:
     return out
 
 
-def exit_from_text(text: str, today: dt.date):
-    """First explicit date in free text: ISO, '20 Nov', 'Nov 20'. Returns (date, snippet) or None. A month-day already more
-    than 30 days past rolls to next year."""
-    if not text:
-        return None
-    cands = []
-    for m in re.finditer(r"\b(20\d{2})-(\d{2})-(\d{2})\b", text):
-        try:
-            cands.append((m.start(), dt.date(int(m.group(1)), int(m.group(2)), int(m.group(3))), m))
-        except ValueError:
-            pass
-    mon = r"(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?"
-    for m in re.finditer(rf"\b(\d{{1,2}})(?:st|nd|rd|th)?\s+{mon}\b", text, re.I):
-        cands.append((m.start(), (int(m.group(1)), MONTHS[m.group(2).lower()[:3]]), m))
-    for m in re.finditer(rf"\b{mon}\s+(\d{{1,2}})(?:st|nd|rd|th)?\b", text, re.I):
-        cands.append((m.start(), (int(m.group(2)), MONTHS[m.group(1).lower()[:3]]), m))
-    cands.sort(key=lambda c: c[0])
-    for _, v, m in cands:
-        if isinstance(v, tuple):
-            day, mo = v
-            try:
-                d = dt.date(today.year, mo, day)
-            except ValueError:
-                continue
-            if (today - d).days > 30:
-                d = dt.date(today.year + 1, mo, day)
-        else:
-            d = v
-        a, b = max(0, m.start() - 25), min(len(text), m.end() + 25)
-        return d, text[a:b].strip().replace("\n", " ")
-    return None
-
-
 def plan_exit(p: dict, today: dt.date):
-    """The plan's own exit_by field first (set on the plan form); else the first explicit date in its text.
-    Returns (date, source, snippet) or None. source is 'exit_by' or 'text'."""
+    """The plan's own exit_by field (set on the Pulse plan form), with its optional exit_reason.
+    Returns (date, reason) or None. Dates in free text are not guessed."""
     xb = p.get("exit_by")
     if xb and re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(xb)):
         try:
-            return dt.date.fromisoformat(xb), "exit_by", None
+            return dt.date.fromisoformat(xb), (str(p.get("exit_reason") or "").strip() or None)
         except ValueError:
             pass
-    ex = exit_from_text(" ".join(str(p.get(k) or "") for k in ("wrong", "feeling")), today)
-    return (ex[0], "text", ex[1]) if ex else None
+    return None
 
 
 def macro_rows(book: str, today: dt.date, fresh: dict | None, ph: dict | None) -> list[dict]:
@@ -306,8 +271,15 @@ def build(today: dt.date, plans: list[dict], results: dict, meta: dict, fresh: d
 
     live = live_plans(plans, results)
     rl = risk_lines(live)
+    past = []
+    for p in sorted(live, key=lambda q: q["symbol"]):
+        ex = plan_exit(p, today)
+        if ex and ex[0] < today:
+            past.append(f"!! PAST EXIT DATE: {p['symbol']} ({p['_state']}) exit by {ex[0].isoformat()}, {(today - ex[0]).days}d ago"
+                        + (f" ({ex[1]})" if ex[1] else ""))
     if rl and rl[0].startswith("!!"):
         L.append(rl.pop(0))
+    L.extend(past)
     L.append(f"POSITIONS CALENDAR  {today.isoformat()} ({today.strftime('%a')})   window {HORIZON} days   ! = within {SOON_TRADING_DAYS} trading days")
     L.append(f"mirror synced_at {sa or 'unknown'} | CGI freshness as of {(fresh or {}).get('as_of', 'unknown')} "
              f"({(fresh or {}).get('n_problems', '?')} problems) | PH data as of {(ph or {}).get('as_of', 'unknown')}")
@@ -337,8 +309,10 @@ def build(today: dt.date, plans: list[dict], results: dict, meta: dict, fresh: d
                 evs, _ = company_events(sym, today, ph)
                 items += [(e["date"], e["kind"], e["label"]) for e in evs]
             ex = plan_exit(p, today)
+            if p.get("wrong"):
+                L.append(f"      wrong: {p['wrong']}")
             if ex and 0 <= (ex[0] - today).days <= HORIZON:
-                items.append((ex[0], "own exit", "exit by (set on your plan)" if ex[1] == "exit_by" else f"exit, from your text: \"{ex[2]}\""))
+                items.append((ex[0], "own exit", "exit by" + (f": {ex[1]}" if ex[1] else "")))
             items.sort(key=lambda i: i[0])
             for d, kind, label in items:
                 soon = 0 <= trading_days_away(today, d) <= SOON_TRADING_DAYS and d >= today
@@ -351,7 +325,7 @@ def build(today: dt.date, plans: list[dict], results: dict, meta: dict, fresh: d
             if not ex:
                 L.append("      exit date: not stated")
             elif not (0 <= (ex[0] - today).days <= HORIZON):
-                L.append(f"      exit {'by (set on your plan)' if ex[1] == 'exit_by' else 'from your text'}: {ex[0].isoformat()} ({rel_day(today, ex[0])}), outside the window")
+                L.append(f"      exit by {ex[0].isoformat()} ({rel_day(today, ex[0])})" + (f": {ex[1]}" if ex[1] else "") + ("  PAST EXIT DATE" if ex[0] < today else ""))
             for m in macro:
                 soon = trading_days_away(today, m["date"]) <= SOON_TRADING_DAYS
                 n_soon += 1 if soon else 0
@@ -359,6 +333,7 @@ def build(today: dt.date, plans: list[dict], results: dict, meta: dict, fresh: d
         L.append("")
     L.append("Notes: weekdays only, no holiday calendar. US single-name earnings not checked (no free source). PH expected dates are "
              "'last year +365 days' estimates. A US fill at IBKR is not in the mirror, so a filled US plan still reads planned.")
+    n_soon += len(past)
     n_soon += sum(1 for b, r in open_risk(live).items() if r["status"] == "OVER" or r["live_status"] == "OVER")
     return "\n".join(L) + "\n", n_soon
 

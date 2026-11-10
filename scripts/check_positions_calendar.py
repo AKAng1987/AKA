@@ -41,16 +41,6 @@ results = {"B": {"fill": 10, "exit": 12, "ts": "2026-11-01T00:00:00Z"}, "E": {"f
 lv = {p["symbol"]: p["_state"] for p in P.live_plans(plans, results)}
 check("live set: planned, open; closed, not triggered, passed dropped", lv, {"AAA": "open", "EEE": "open", "FFF": "planned"})
 
-# exit date from text
-ed = lambda t: (P.exit_from_text(t, today) or [None])[0]  # noqa: E731
-check("ISO date", ed("close it by 2026-11-20 whatever"), D(2026, 11, 20))
-check("20 Nov", ed("sell before 20 Nov earnings"), D(2026, 11, 20))
-check("Nov 20", ed("out Nov 20th"), D(2026, 11, 20))
-check("past month-day rolls to next year", ed("by Jan 5"), D(2027, 1, 5))
-check("a date 10 days past stays this year", ed("was 27 Oct"), D(2026, 10, 27))
-check("no date -> None", P.exit_from_text("Oil breaks out, yields break out, or price.", today), None)
-check("empty text -> None", P.exit_from_text("", today), None)
-
 # macro rows
 fresh = {"release_calendar": {"next": {"FOMC": "2026-12-09", "CPI": "2026-11-10", "GDP": "2026-11-25", "SLOOS": "2027-02-01"}}}
 ph = {"header": {"bsp": {"next": "2026-12-17"}},
@@ -97,10 +87,11 @@ plans2 = [{"id": "A", "symbol": "SMPH", "book": "PH", "status": "planned", "plan
            "wrong": "Oil breaks out"}]
 text, n_soon = P.build(today, plans2, {}, meta, fresh | {"as_of": "2026-11-06", "n_problems": 0}, ph, [], now)
 check("PH 'nothing scheduled' printed for a name with no events", "ZZZ" in text and "nothing scheduled for this name in 21 days" in text, True)
-check("own exit from text labelled", "exit, from your text" in text, True)
+check("text dates are no longer guessed as exits", "from your text" in text, False)
+check("wrong line printed word for word", "wrong: Oil breaks out" in text, True)
 check("MORT shows CPI, GDP, FOMC and says earnings not checked", all(x in text for x in ("CPI (can flip inflation)", "GDP (can flip growth)", "FOMC (can flip liquidity)", "US earnings: not checked")), True)
 check("exit date: not stated for a plan with no date", "exit date: not stated" in text, True)
-check("'!' marks events within 3 trading days (PH GDP Mon, CPI Tue, own exit Mon)", n_soon >= 3, True)
+check("'!' marks events within 3 trading days (PH GDP Mon, CPI Tue)", n_soon >= 2, True)
 check("no stale header on a fresh mirror", "STALE" in text, False)
 old = dt.datetime(2026, 11, 8, 2, 0, tzinfo=dt.timezone.utc)
 text2, _ = P.build(today, plans2, {}, meta, fresh, ph, [], old)
@@ -111,17 +102,20 @@ check("stale PH calendar said in the header", "PH macro calendar last refreshed 
 text4, _ = P.build(today, [], {}, meta, None, None, ["could not read /api/ph: boom"], now)
 check("unreadable sources reported, empty books say so", ("unreadable" in text4, "PH: no live plans" in text4, "US: no live plans" in text4, "boom" in text4), (True, True, True, True))
 
-# exit_by on the plan wins over text
-pe = P.plan_exit({"exit_by": "2026-11-12", "wrong": "out by 20 Nov"}, today)
-check("exit_by field wins over text", (pe[0].isoformat(), pe[1]), ("2026-11-12", "exit_by"))
-check("text used when no exit_by", P.plan_exit({"wrong": "out by 20 Nov"}, today)[1], "text")
+# exit_by on the plan (handoff 02)
+pe = P.plan_exit({"exit_by": "2026-11-12", "exit_reason": " before FOMC ", "wrong": "out by 20 Nov"}, today)
+check("exit_by with trimmed reason; text ignored", (pe[0].isoformat(), pe[1]), ("2026-11-12", "before FOMC"))
+check("no exit_by -> None even with a date in the text", P.plan_exit({"wrong": "out by 20 Nov"}, today), None)
 check("bad exit_by ignored", P.plan_exit({"exit_by": "soon"}, today), None)
-t5, n5 = P.build(today, [{"id": "X", "symbol": "XXX", "book": "PH", "status": "planned", "plan_ts": "2026-11-05T00:00:00Z", "entry": 1, "stop": .9,
-                          "exit_by": "2026-11-09"}], {}, meta, fresh, ph, [], now)
-check("exit_by in window listed with '!' and the plan source", ("exit by (set on your plan)" in t5, "! 2026-11-09" in t5), (True, True))
-t6, _ = P.build(today, [{"id": "X", "symbol": "XXX", "book": "PH", "status": "planned", "plan_ts": "2026-11-05T00:00:00Z", "entry": 1, "stop": .9,
-                         "exit_by": "2027-03-01"}], {}, meta, fresh, ph, [], now)
-check("exit_by outside the window said so", "outside the window" in t6, True)
+base = {"book": "PH", "status": "planned", "plan_ts": "2026-11-05T00:00:00Z", "entry": 1, "stop": .9}
+t5, n5 = P.build(today, [dict(base, id="X", symbol="XXX", exit_by="2026-11-09", exit_reason="before FOMC Dec 9")], {}, meta, fresh, ph, [], now)
+check("exit_by in window: '!' and reason", ("exit by: before FOMC Dec 9" in t5, "! 2026-11-09" in t5), (True, True))
+t6, _ = P.build(today, [dict(base, id="X", symbol="XXX", exit_by="2027-03-01")], {}, meta, fresh, ph, [], now)
+check("exit_by outside the window said so with the date", "exit by 2027-03-01" in t6, True)
+t7, n7 = P.build(today, [dict(base, id="X", symbol="XXX", exit_by="2026-11-05", exit_reason="test")], {}, meta, fresh, ph, [], now)
+check("past exit date leads the screen", t7.startswith("!! PAST EXIT DATE: XXX (planned) exit by 2026-11-05, 1d ago (test)"), True)
+check("past exit counts as urgent", n7 >= 1, True)
+check("no past line when exit is today or later", "PAST EXIT" in t5, False)
 
 # ── open risk (handoff 01) ───────────────────────────────────────────────────────────────────────
 def lp(sym, book, entry, stop, shares, fill=None, **kw):
