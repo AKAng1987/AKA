@@ -226,5 +226,11 @@ check("old stale lines are folded into the block (said once)", (tb.count("PULSE 
 tn, _ = P.build(today, [], {}, {"synced_at": "2026-11-06T00:50:13Z"}, fresh | {"as_of": "x", "n_problems": 0}, ph, [], now, events=[])
 check("nothing to flag said plainly", tn.startswith("SINCE YESTERDAY: nothing to flag"), True)
 
+ts_, _ = P.build(today, [], {}, {"synced_at": "2026-11-06T00:50:13Z"}, fresh | {"as_of": "x", "n_problems": 0}, ph, [], now, events=[],
+                 stress=["STRESS PH  at stops 1.00%", "       cluster PH: 1 name(s)"])
+check("stress lines are shown under the risk block", "STRESS PH  at stops 1.00%" in ts_, True)
+ts0, _ = P.build(today, [], {}, {"synced_at": "2026-11-06T00:50:13Z"}, fresh | {"as_of": "x", "n_problems": 0}, ph, [], now, events=[])
+check("no stress lines when none are given", "STRESS" in ts0, False)
+
 print("FAILS:", fails)
 sys.exit(1 if fails else 0)

@@ -281,7 +281,8 @@ def past_exit_items(live: list[dict], today: dt.date) -> list[tuple]:
 
 
 def build(today: dt.date, plans: list[dict], results: dict, meta: dict, fresh: dict | None, ph: dict | None,
-          errors: list[str], now: dt.datetime | None = None, events: list[dict] | None = None) -> tuple[str, int]:
+          errors: list[str], now: dt.datetime | None = None, events: list[dict] | None = None,
+          stress: list[str] | None = None) -> tuple[str, int]:
     """Returns (text, n_soon). With events (screen-ordered), a SINCE YESTERDAY block leads and the old lead/stale lines fold into it."""
     now = now or dt.datetime.now(dt.timezone.utc)
     L: list[str] = []
@@ -311,6 +312,8 @@ def build(today: dt.date, plans: list[dict], results: dict, meta: dict, fresh: d
     for s in stale:
         L.append(f"  ~ {s}")
     L.extend(rl)
+    if stress:
+        L.extend(stress)
     L.append("")
 
     n_soon = 0
@@ -488,7 +491,18 @@ def main() -> int:
     logged = EV.read_events(now - dt.timedelta(hours=24))
     seen = {e.get("key") for e in logged}
     merged = logged + [dict(e, ts=now.strftime("%Y-%m-%dT%H:%M:%SZ")) for e in mem if e["key"] not in seen]   # if the log could not be written
-    text, n_soon = build(today, plans, results, meta, fresh, ph, errors, now, events=EV.screen_order(merged))
+    stress = []
+    try:   # gap-shock lines (handoff 10): a failure here shows as one line, never breaks the calendar
+        import gap_shock
+        import watch_table
+        try:
+            themes = fetch_json("/api/themes")
+        except Exception:  # noqa: BLE001
+            themes = None
+        stress = gap_shock.stress_lines(gap_shock.compute(live, open_risk(live), ph, {k: v[0] for k, v in watch_table.theme_map(themes).items()}))
+    except Exception as exc:  # noqa: BLE001
+        errors.append(f"gap shock not computed: {exc}")
+    text, n_soon = build(today, plans, results, meta, fresh, ph, errors, now, events=EV.screen_order(merged), stress=stress)
     os.makedirs(os.path.dirname(a.out), exist_ok=True)
     open(a.out, "w").write(text)
     print(text, end="")
