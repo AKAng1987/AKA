@@ -24,6 +24,7 @@ import subprocess
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import events as EV  # noqa: E402
 
 HORIZON = 21           # days: company events and own exit dates
 SOON_TRADING_DAYS = 3  # "!" marker
@@ -240,46 +241,70 @@ def rel_day(today: dt.date, d: dt.date) -> str:
     return "today" if n == 0 else "yesterday" if n == -1 else f"{n:+d}d" if n < 0 else f"+{n}d"
 
 
-def build(today: dt.date, plans: list[dict], results: dict, meta: dict, fresh: dict | None, ph: dict | None,
-          errors: list[str], now: dt.datetime | None = None) -> tuple[str, int]:
-    """Returns (text, n_soon)."""
-    now = now or dt.datetime.now(dt.timezone.utc)
-    L: list[str] = []
-    stale = []
+def stale_items(meta: dict, fresh: dict | None, ph: dict | None, errors: list[str], now: dt.datetime, today: dt.date) -> list[tuple]:
+    """Header problems as (source, kind, level, text): a stale mirror, bad CGI data, an unreadable source."""
+    out = []
     sa = meta.get("synced_at")
     if sa:
         age_h = (now - dt.datetime.fromisoformat(sa.replace("Z", "+00:00"))).total_seconds() / 3600
         if age_h > MIRROR_STALE_H:
-            stale.append(f"PULSE MIRROR STALE: synced {sa} ({age_h:.0f} h ago); plans below may be out of date")
+            out.append(("mirror", "stale", "alert", f"PULSE MIRROR STALE: synced {sa} ({age_h:.0f} h ago); plans below may be out of date"))
     else:
-        stale.append("PULSE MIRROR: no synced_at found")
+        out.append(("mirror", "no_sync", "alert", "PULSE MIRROR: no synced_at found"))
     if fresh is None:
-        stale.append("CGI freshness unreadable: US release dates missing")
+        out.append(("cgi", "unreadable", "alert", "CGI freshness unreadable: US release dates missing"))
     elif fresh.get("n_problems"):
         where = [k for k, v in fresh.items() if isinstance(v, dict) and (v.get("n_problems") or 0) > 0]
-        stale.append(f"CGI freshness reports {fresh['n_problems']} data problem(s)" + (f" in: {', '.join(where)}" if where else ""))
+        out.append(("cgi", "freshness", "warn", f"CGI freshness reports {fresh['n_problems']} data problem(s)" + (f" in: {', '.join(where)}" if where else "")))
     if ph is None:
-        stale.append("CGI /api/ph unreadable: PH events missing")
+        out.append(("calendar", "ph_unreadable", "warn", "CGI /api/ph unreadable: PH events missing"))
     else:
         cal_asof = ((ph.get("calendar") or {}).get("asof") or "")[:10]
         if cal_asof and (today - dt.date.fromisoformat(cal_asof)).days > CAL_STALE_DAYS:
-            stale.append(f"PH macro calendar last refreshed {cal_asof} ({(today - dt.date.fromisoformat(cal_asof)).days} days ago)")
+            out.append(("calendar", "ph_calendar_old", "warn", f"PH macro calendar last refreshed {cal_asof} ({(today - dt.date.fromisoformat(cal_asof)).days} days ago)"))
         age = (((ph.get("freshness") or {}).get("edge") or {}).get("age_days"))
         if age is not None and age > 2:
-            stale.append(f"PSE EDGE snapshot is {age} days old")
-    stale += errors
+            out.append(("calendar", "edge_old", "warn", f"PSE EDGE snapshot is {age} days old"))
+    for e in errors:
+        out.append(("calendar", "source_error", "warn", e))
+    return out
 
-    live = live_plans(plans, results)
-    rl = risk_lines(live)
-    past = []
+
+def past_exit_items(live: list[dict], today: dt.date) -> list[tuple]:
+    """(symbol, state, exit_date, reason) for live plans past their exit_by date."""
+    out = []
     for p in sorted(live, key=lambda q: q["symbol"]):
         ex = plan_exit(p, today)
         if ex and ex[0] < today:
-            past.append(f"!! PAST EXIT DATE: {p['symbol']} ({p['_state']}) exit by {ex[0].isoformat()}, {(today - ex[0]).days}d ago"
-                        + (f" ({ex[1]})" if ex[1] else ""))
-    if rl and rl[0].startswith("!!"):
-        L.append(rl.pop(0))
-    L.extend(past)
+            out.append((p["symbol"], p["_state"], ex[0], ex[1]))
+    return out
+
+
+def build(today: dt.date, plans: list[dict], results: dict, meta: dict, fresh: dict | None, ph: dict | None,
+          errors: list[str], now: dt.datetime | None = None, events: list[dict] | None = None) -> tuple[str, int]:
+    """Returns (text, n_soon). With events (screen-ordered), a SINCE YESTERDAY block leads and the old lead/stale lines fold into it."""
+    now = now or dt.datetime.now(dt.timezone.utc)
+    L: list[str] = []
+    sa = meta.get("synced_at")
+    stale = [t for _, _, _, t in stale_items(meta, fresh, ph, errors, now, today)]
+
+    live = live_plans(plans, results)
+    rl = risk_lines(live)
+    past = [f"!! PAST EXIT DATE: {sym} ({state}) exit by {d.isoformat()}, {(today - d).days}d ago" + (f" ({reason})" if reason else "")
+            for sym, state, d, reason in past_exit_items(live, today)]
+    if events is not None:
+        if rl and rl[0].startswith("!!"):
+            rl.pop(0)
+        na, nw = sum(e["level"] == "alert" for e in events), sum(e["level"] == "warn" for e in events)
+        L.append(f"SINCE YESTERDAY: {na} alert(s), {nw} warning(s)" if events else "SINCE YESTERDAY: nothing to flag")
+        for e in events:
+            L.append(f"  {'!!' if e['level'] == 'alert' else ' ~'} {e['text']}  [{e['source']}]")
+        L.append("")
+        stale = []
+    else:
+        if rl and rl[0].startswith("!!"):
+            L.append(rl.pop(0))
+        L.extend(past)
     L.append(f"POSITIONS CALENDAR  {today.isoformat()} ({today.strftime('%a')})   window {HORIZON} days   ! = within {SOON_TRADING_DAYS} trading days")
     L.append(f"mirror synced_at {sa or 'unknown'} | CGI freshness as of {(fresh or {}).get('as_of', 'unknown')} "
              f"({(fresh or {}).get('n_problems', '?')} problems) | PH data as of {(ph or {}).get('as_of', 'unknown')}")
@@ -338,6 +363,84 @@ def build(today: dt.date, plans: list[dict], results: dict, meta: dict, fresh: d
     return "\n".join(L) + "\n", n_soon
 
 
+def calendar_events(today: dt.date, now: dt.datetime, live: list[dict], meta: dict, fresh: dict | None, ph: dict | None,
+                    errors: list[str]) -> list[dict]:
+    """Everything this run knows that belongs in the event log. Conditions that persist carry today's date in their key,
+    so they reappear each morning until fixed. No Flow text, no plan wording, no balances."""
+    ev = []
+
+    def add(source, kind, level, text, key, symbol=None):
+        ev.append({"source": source, "kind": kind, "level": level, "text": text, "symbol": symbol, "key": f"{key}:{today.isoformat()}"})
+
+    sa = meta.get("synced_at")
+    if sa:
+        ev.append({"source": "mirror", "kind": "synced", "level": "info", "text": f"Pulse mirror synced {sa}", "symbol": None, "key": f"mirror-synced:{sa}"})
+    for source, kind, level, text in stale_items(meta, fresh, ph, errors, now, today):
+        if source == "mirror" and kind == "stale" and today.weekday() >= 5:
+            continue                                       # stale on a weekday only
+        add(source, kind, level, text, f"{source}-{kind}")
+    rk = open_risk(live)
+    for b, r in rk.items():
+        if "OVER" in (r["status"], r["live_status"]):
+            live_over = r["live_status"] == "OVER"
+            add("calendar", "risk_over", "alert",
+                f"{b} open risk {r['live_pct' if live_over else 'all_pct']:.2f}% {'live' if live_over else 'if all trigger'}: OVER the {RISK_CAP:.2f}% cap", f"risk-over-{b}")
+        if r["unknown"]:
+            add("calendar", "risk_unknown", "warn", f"{b} open risk incomplete: risk unknown for {', '.join(r['unknown'])}", f"risk-unknown-{b}")
+    for sym, state, d, reason in past_exit_items(live, today):
+        add("calendar", "past_exit", "alert", f"PAST EXIT DATE: {sym} ({state}) exit by {d.isoformat()}, {(today - d).days}d ago"
+            + (f" ({reason})" if reason else ""), f"past-exit-{sym}", sym)
+    for book in ("PH", "US"):
+        group = [p for p in live if (p.get("book") or "US") == book]
+        if not group:
+            continue
+        for m in macro_rows(book, today, fresh, ph):
+            if trading_days_away(today, m["date"]) <= SOON_TRADING_DAYS:
+                add("calendar", "release", "warn", f"{m['label']} {m['date'].isoformat()} ({rel_day(today, m['date'])}) bears on the {book} book",
+                    f"release-{book}-{m['label']}-{m['date'].isoformat()}")
+        for p in group:
+            sym = p["symbol"]
+            ex = plan_exit(p, today)
+            if ex and 0 <= trading_days_away(today, ex[0]) <= SOON_TRADING_DAYS and ex[0] >= today:
+                add("calendar", "exit_soon", "warn", f"{sym} exit by {ex[0].isoformat()} ({rel_day(today, ex[0])})" + (f": {ex[1]}" if ex[1] else ""), f"exit-soon-{sym}", sym)
+            if book == "PH":
+                evs, results_out = company_events(sym, today, ph)
+                if results_out:
+                    add("calendar", "results_filed", "warn", f"{sym} results filed in the last {RECENT_DAYS} days (see EDGE)", f"results-filed-{sym}", sym)
+                for e in evs:
+                    if e["kind"] == "results" and 0 <= trading_days_away(today, e["date"]) <= SOON_TRADING_DAYS:
+                        add("calendar", "results_expected", "warn", f"{sym} results expected {e['date'].isoformat()} ({rel_day(today, e['date'])})", f"results-expected-{sym}", sym)
+    return ev
+
+
+def regime_event(code: str | None, state_path: str, today: dt.date) -> dict | None:
+    """Compare today's regime code with the last one seen. The first run only records a baseline."""
+    if not code:
+        return None
+    try:
+        prev = json.load(open(state_path)).get("regime")
+    except (OSError, ValueError):
+        prev = None
+    try:
+        json.dump({"regime": code, "seen": today.isoformat()}, open(state_path, "w"))
+    except OSError:
+        pass
+    if prev and prev != code:
+        return {"source": "regime", "kind": "changed", "level": "alert", "text": f"Regime changed: {prev} to {code}", "symbol": None,
+                "key": f"regime-changed:{prev}>{code}"}
+    return None
+
+
+def current_regime() -> str | None:
+    try:
+        b = fetch_json("/api/brief?cadence=daily")
+        h = next((x.get("headline") for x in b.get("sections", []) if x.get("name") == "regime"), "") or ""
+        m = re.match(r"\s*(C\d\s*G\d)", h)
+        return m.group(1).replace(" ", "") if m else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def load_mirror(mirror: str):
     plans = [json.load(open(f)) for f in sorted(glob.glob(os.path.join(mirror, "plans", "*.json")))]
     results = {}
@@ -370,13 +473,28 @@ def main() -> int:
         ph = fetch_json("/api/ph")
     except Exception as exc:  # noqa: BLE001
         errors.append(f"could not read /api/ph: {exc}")
-    text, n_soon = build(today, plans, results, meta, fresh, ph, errors if (fresh is not None and ph is not None) else errors)
+    now = dt.datetime.now(dt.timezone.utc)
+    live = live_plans(plans, results)
+    mem = calendar_events(today, now, live, meta, fresh, ph, errors)
+    rg = regime_event(current_regime(), os.path.join(os.path.dirname(EV.path()), "events_state.json"), today)
+    if rg:
+        mem.append(rg)
+    n_new_alerts, first_alert = 0, None
+    for e in mem:
+        if EV.log_event(e["source"], e["kind"], e["level"], e["text"], e.get("symbol"), e["key"], file=None) and e["level"] == "alert":
+            n_new_alerts += 1
+            first_alert = first_alert or e["text"]
+    EV.rotate()
+    logged = EV.read_events(now - dt.timedelta(hours=24))
+    seen = {e.get("key") for e in logged}
+    merged = logged + [dict(e, ts=now.strftime("%Y-%m-%dT%H:%M:%SZ")) for e in mem if e["key"] not in seen]   # if the log could not be written
+    text, n_soon = build(today, plans, results, meta, fresh, ph, errors, now, events=EV.screen_order(merged))
     os.makedirs(os.path.dirname(a.out), exist_ok=True)
     open(a.out, "w").write(text)
     print(text, end="")
-    if a.notify and n_soon:
-        msg = f"{n_soon} flag(s) (events within {SOON_TRADING_DAYS} trading days, or open risk over cap): see out/positions_calendar.txt"
-        subprocess.run(["osascript", "-e", f'display notification "{msg}" with title "Positions calendar"'], check=False)
+    if a.notify and (n_soon or n_new_alerts):
+        msg = (f"ALERT: {first_alert[:100]}" if first_alert else f"{n_soon} flag(s) (events within {SOON_TRADING_DAYS} trading days, or open risk over cap)") + ": see out/positions_calendar.txt"
+        subprocess.run(["osascript", "-e", f'display notification "{msg.replace(chr(34), "")}" with title "Positions calendar"'], check=False)
     return 0
 
 

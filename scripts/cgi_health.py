@@ -159,6 +159,17 @@ def main() -> int:
         amber.append(f"could not read brief: {exc}")
 
     verdict = "RED" if red else "AMBER" if amber else "GREEN"
+    try:
+        import datetime as _dt, os as _os
+        sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+        import events as EV
+        day = _dt.date.today().isoformat()
+        EV.log_event("cgi_health", "verdict", "info", f"CGI health {verdict}", key=f"cgi_health-verdict:{verdict}:{day}")
+        for tag, level, items in (("red", "alert", red), ("amber", "warn", amber)):
+            for i in items:
+                EV.log_event("cgi_health", tag, level, i, key=f"cgi_health-{tag}:{i[:80]}:{day}")
+    except Exception:  # noqa: BLE001 -- the event log is optional
+        pass
     print(f"{verdict}  CGI health, as of {f.get('as_of')}")
     for l in lines:
         print("  " + l)

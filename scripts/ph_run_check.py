@@ -114,6 +114,15 @@ def main() -> int:
     json.dump(r, open(OUT, "w"), indent=1)
     print(f"ph_run_check {r['mode']}: {'OK' if r['ok'] else 'PROBLEM'} " + (f"prices to {r.get('prices_asof')}, " if r["mode"] == "daily" else "") +
           f"EDGE stored {r['edge_age_min']} min ago" + ("" if r["ok"] else " | " + " ; ".join(r["messages"])))
+    try:
+        import events as EV
+        slot = str(r.get("at", ""))[:13]
+        if r["ok"]:
+            EV.log_event("ph_daily", "build", "info", f"PH {r['mode']} build done" + (f", prices to {r['prices_asof']}" if r.get("prices_asof") else ""), key=f"ph_daily-ok:{r['mode']}:{slot}")
+        else:
+            EV.log_event("ph_daily", "build", "alert", f"PH {r['mode']} build problem: " + " ; ".join(r["messages"]), key=f"ph_daily-bad:{r['mode']}:{slot}")
+    except Exception:  # noqa: BLE001 -- the event log is optional
+        pass
     if not r["ok"] and a.notify:
         subprocess.run(["osascript", "-e", f'display notification "{r["messages"][0][:110]}" with title "CGI Philippines run"'.replace("'", "")], check=False)
     return 0 if r["ok"] else 1

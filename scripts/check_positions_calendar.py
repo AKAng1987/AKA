@@ -182,5 +182,49 @@ tx, ns = P.build(today, [a for a, _ in ph_open] + [smph[0], mort[0]], {k: v for 
 check("build: first line is the OVER flag, RISK line under the header, per-plan risk shown",
       (tx.splitlines()[0].startswith("!! OPEN RISK OVER CAP"), "\nRISK  PH live" in tx, "| risk 1.10R" in tx), (True, True, True))
 
+# ── event log (handoff 03) ───────────────────────────────────────────────────────────────────────
+import json  # noqa: E402
+import tempfile  # noqa: E402
+import events as EV  # noqa: E402
+
+old_now = dt.datetime(2026, 11, 8, 2, 0, tzinfo=dt.timezone.utc)      # mirror (06 Nov 00:50Z) is ~49 h old
+fresh_bad = fresh | {"as_of": "2026-11-06", "n_problems": 1, "price_jumps": {"n_problems": 1}}
+base = {"book": "PH", "status": "planned", "plan_ts": "2026-11-05T00:00:00Z", "entry": 1, "stop": .9, "shares": 1000, "oneR": 100}
+live_ev = P.live_plans([dict(base, id="X", symbol="XXX", exit_by="2026-11-05", exit_reason="test"),
+                        dict(base, id="Y", symbol="YYY", book="US", exit_by="2026-11-09")], {})
+ev = P.calendar_events(today, old_now, live_ev, meta, fresh_bad, ph, [])
+kinds = {(e["source"], e["kind"], e["level"]) for e in ev}
+check("stale mirror is an alert on a weekday", ("mirror", "stale", "alert") in kinds, True)
+check("CGI freshness problem is a warn naming the section", any(e["source"] == "cgi" and "price_jumps" in e["text"] for e in ev), True)
+check("past exit is an alert", ("calendar", "past_exit", "alert") in kinds, True)
+check("exit within 3 trading days is a warn", ("calendar", "exit_soon", "warn") in kinds, True)
+check("mirror synced is info", ("mirror", "synced", "info") in kinds, True)
+check("persistent conditions carry the day in their key",
+      all(e["key"].endswith(today.isoformat()) or e["kind"] == "synced" for e in ev), True)
+sat = dt.date(2026, 11, 7)
+ev_sat = P.calendar_events(sat, old_now, live_ev, meta, fresh, ph, [])
+check("stale mirror not alerted on a weekend", ("mirror", "stale", "alert") in {(e["source"], e["kind"], e["level"]) for e in ev_sat}, False)
+over = P.calendar_events(today, old_now, P.live_plans([dict(base, id="O%d" % i, symbol="S%d" % i, entry=11, stop=10, shares=25000, oneR=25000)
+                                                       for i in range(7)], {}), meta, fresh, ph, [])
+check("risk over cap is an alert", any(e["kind"] == "risk_over" and e["level"] == "alert" for e in over), True)
+blob = json.dumps(ev + over).lower()
+check("no account, balance or plan-wording text in events", any(w in blob for w in ("account", "balance", "wrong")), False)
+
+# regime change
+sp = os.path.join(tempfile.mkdtemp(), "state.json")
+check("first regime run records a baseline, no event", P.regime_event("C1G2", sp, today), None)
+check("same regime, no event", P.regime_event("C1G2", sp, today), None)
+rg = P.regime_event("C2G2", sp, today)
+check("regime change is an alert naming both", (rg["level"], rg["text"]), ("alert", "Regime changed: C1G2 to C2G2"))
+check("no code, no event", P.regime_event(None, sp, today), None)
+
+# screen block
+scr = EV.screen_order([dict(e, ts="2026-11-08T01:00:00Z") for e in ev])
+tb, _ = P.build(today, [dict(base, id="X", symbol="XXX")], {}, meta, fresh_bad, ph, [], old_now, events=scr)
+check("SINCE YESTERDAY leads, stale mirror is its first line", (tb.startswith("SINCE YESTERDAY: "), tb.splitlines()[1].startswith("  !! PULSE MIRROR STALE")), (True, True))
+check("old stale lines are folded into the block (said once)", (tb.count("PULSE MIRROR STALE"), "\n  ~ PULSE" in tb), (1, False))
+tn, _ = P.build(today, [], {}, {"synced_at": "2026-11-06T00:50:13Z"}, fresh | {"as_of": "x", "n_problems": 0}, ph, [], now, events=[])
+check("nothing to flag said plainly", tn.startswith("SINCE YESTERDAY: nothing to flag"), True)
+
 print("FAILS:", fails)
 sys.exit(1 if fails else 0)
