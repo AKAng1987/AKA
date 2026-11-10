@@ -97,7 +97,10 @@ def read_events(since: dt.datetime, file: str | None = None) -> list[dict]:
 
 def screen_order(events: list[dict]) -> list[dict]:
     """Alerts before warns; within a level, data-health sources first, then newest first. Info is dropped."""
-    ev = [e for e in events if e.get("level") in ("warn", "alert")]
+    synced = max((e["ts"] for e in events if e.get("source") == "mirror" and e.get("kind") == "synced"), default="")
+    # a stale-mirror alert is cleared by a later "mirror synced" event; other events are history and stay for the window
+    ev = [e for e in events if e.get("level") in ("warn", "alert")
+          and not (e.get("kind") in ("stale", "mirror_old", "no_sync") and e.get("source") in ("mirror", "task_watch") and e["ts"] < synced)]
     ev.sort(key=lambda e: e["ts"], reverse=True)
     ev.sort(key=lambda e: (-LEVELS[e["level"]], 0 if e.get("source") in DATA_SOURCES else 1))
     return ev

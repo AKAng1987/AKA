@@ -49,6 +49,9 @@ rec = E.read_events(now - dt.timedelta(hours=24), file=g)
 check("24h window drops the 30h-old event", len(rec), 5)
 order = [e["text"] for e in E.screen_order(rec)]
 check("alerts first, data health first within a level, info dropped", order, ["mirror old", "PH over cap", "1 problem", "CPI today"])
+E.log_event("mirror", "synced", "info", "Pulse mirror synced", key="s1", ts=T(0), file=g)
+check("a later mirror sync clears the stale-mirror alert, other alerts stay",
+      [e["text"] for e in E.screen_order(E.read_events(now - dt.timedelta(hours=24), file=g))], ["PH over cap", "1 problem", "CPI today"])
 check("missing file reads as empty", E.read_events(now, file=os.path.join(d, "none")), [])
 
 # rotation
