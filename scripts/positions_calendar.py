@@ -492,6 +492,11 @@ def main() -> int:
     os.makedirs(os.path.dirname(a.out), exist_ok=True)
     open(a.out, "w").write(text)
     print(text, end="")
+    try:   # the watch table runs as a second step of this job (no separate schedule); a failure here never breaks the calendar
+        import watch_table
+        watch_table.main(["--mirror", a.mirror], echo=False)
+    except Exception as exc:  # noqa: BLE001
+        print(f"(watch table not written: {exc})")
     if a.notify and (n_soon or n_new_alerts):
         msg = (f"ALERT: {first_alert[:100]}" if first_alert else f"{n_soon} flag(s) (events within {SOON_TRADING_DAYS} trading days, or open risk over cap)") + ": see out/positions_calendar.txt"
         subprocess.run(["osascript", "-e", f'display notification "{msg.replace(chr(34), "")}" with title "Positions calendar"'], check=False)
