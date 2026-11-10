@@ -183,6 +183,93 @@ def company_events(sym: str, today: dt.date, ph: dict | None) -> tuple[list[dict
     return ev, results_out
 
 
+# ── open risk (handoff 01) ────────────────────────────────────────────────────────────────────────
+ONE_R = {"PH": 25000.0, "US": 600.0}   # PHP / USD; 1R = 0.25% of the book, so percent = R x 0.25 (no balances read)
+PCT_PER_R = 0.25
+RISK_CAP = 1.50                          # his own open-risk cap, % per book
+RISK_NEAR = 1.40                         # "at cap" band starts here (default; adjustable)
+
+
+def _num(x):
+    try:
+        v = float(x)
+    except (TypeError, ValueError):
+        return None
+    return v if v == v else None
+
+
+def plan_risk(p: dict) -> dict:
+    """Risk of one live plan in R. Open: (fill - stop) x shares. Planned: (entry - stop) x shares. Never negative.
+    unknown=True when stop, shares (or the fill of an open trade) is missing or not a positive number."""
+    book = p.get("book") or "US"
+    stop, shares = _num(p.get("stop")), _num(p.get("shares"))
+    ref = _num(p.get("_fill")) if p.get("_state") == "open" else _num(p.get("entry"))
+    if stop is None or shares is None or shares <= 0 or ref is None:
+        return {"symbol": p.get("symbol", "?"), "state": p.get("_state"), "unknown": True, "r": None, "locked": False}
+    risk = (ref - stop) * shares
+    return {"symbol": p.get("symbol", "?"), "state": p.get("_state"), "unknown": False,
+            "r": max(0.0, risk) / ONE_R.get(book, ONE_R["US"]), "locked": risk <= 0}
+
+
+def cap_status(pct: float) -> str:
+    pct = round(pct, 2)
+    return "OVER" if pct > RISK_CAP else "AT CAP" if pct >= RISK_NEAR else "under"
+
+
+def open_risk(live: list[dict]) -> dict:
+    """Per book: live (open) and if-all-trigger (open + planned) risk in R and %, unknown names, cap status."""
+    out = {}
+    for book in ("PH", "US"):
+        items = [plan_risk(p) for p in live if (p.get("book") or "US") == book]
+        live_r = sum(i["r"] for i in items if i["state"] == "open" and not i["unknown"])
+        plan_r = sum(i["r"] for i in items if i["state"] == "planned" and not i["unknown"])
+        unknown = [i["symbol"] for i in items if i["unknown"]]
+        out[book] = {"items": items, "unknown": unknown, "live_r": live_r, "all_r": live_r + plan_r,
+                     "live_pct": round(live_r * PCT_PER_R, 2), "all_pct": round((live_r + plan_r) * PCT_PER_R, 2),
+                     "status": cap_status((live_r + plan_r) * PCT_PER_R), "live_status": cap_status(live_r * PCT_PER_R)}
+    return out
+
+
+def risk_lines(live: list[dict]) -> list[str]:
+    rk = open_risk(live)
+    over = [b for b in ("PH", "US") if rk[b]["status"] == "OVER" or rk[b]["live_status"] == "OVER"]
+    L: list[str] = []
+
+    def seg(b):
+        r = rk[b]
+        inc = f" INCOMPLETE ({len(r['unknown'])} unknown)" if r["unknown"] else ""
+        atl = "at least " if r["unknown"] else ""
+        return (f"{b} live {atl}{r['live_pct']:.2f}% ({r['live_r']:.1f}R) | if all trigger {atl}{r['all_pct']:.2f}% ({r['all_r']:.1f}R) "
+                f"{'cap not confirmed' if r['unknown'] and r['status'] != 'OVER' else r['status']}{inc}")
+    comb = rk["PH"]["all_pct"] + rk["US"]["all_pct"]
+    inc_any = bool(rk["PH"]["unknown"] or rk["US"]["unknown"])
+    L.append("RISK  " + "    ".join(seg(b) for b in ("PH", "US")) +
+             f"    combined {'at least ' if inc_any else ''}{comb:.2f}% if all trigger (for information, no cap)")
+    for b in ("PH", "US"):
+        r = rk[b]
+        def fmt(i):
+            if i["unknown"]:
+                return f"{i['symbol']} risk unknown"
+            return f"{i['symbol']} {i['r']:.2f}R" + (" (stop at or above fill: 0R)" if i["locked"] and i["state"] == "open" else "")
+        o = [fmt(i) for i in r["items"] if i["state"] == "open"]
+        pl = [fmt(i) for i in r["items"] if i["state"] == "planned"]
+        if not (o or pl):
+            continue
+        parts = []
+        if o:
+            parts.append(f"{b} open: " + "  ".join(o) + "  (partials not seen)")
+        if pl:
+            parts.append(f"{b} planned: " + "  ".join(pl))
+        L.append("      " + " | ".join(parts))
+    L.append("      Cap " + f"{RISK_CAP:.2f}% per book, 1R = {PCT_PER_R}% of the book. Small sample, a guide. "
+             "A US fill at IBKR is not in the mirror, so a filled US plan counts as planned. A stop moved only at the broker is not seen.")
+    if over:
+        L.insert(0, "!! OPEN RISK OVER CAP: " + "; ".join(
+            f"{b} {'live' if rk[b]['live_status'] == 'OVER' else 'if all trigger'} "
+            f"{rk[b]['live_pct' if rk[b]['live_status'] == 'OVER' else 'all_pct']:.2f}% (cap {RISK_CAP:.2f}%)" for b in over))
+    return L
+
+
 def rel_day(today: dt.date, d: dt.date) -> str:
     n = (d - today).days
     return "today" if n == 0 else "yesterday" if n == -1 else f"{n:+d}d" if n < 0 else f"+{n}d"
@@ -217,14 +304,18 @@ def build(today: dt.date, plans: list[dict], results: dict, meta: dict, fresh: d
             stale.append(f"PSE EDGE snapshot is {age} days old")
     stale += errors
 
+    live = live_plans(plans, results)
+    rl = risk_lines(live)
+    if rl and rl[0].startswith("!!"):
+        L.append(rl.pop(0))
     L.append(f"POSITIONS CALENDAR  {today.isoformat()} ({today.strftime('%a')})   window {HORIZON} days   ! = within {SOON_TRADING_DAYS} trading days")
     L.append(f"mirror synced_at {sa or 'unknown'} | CGI freshness as of {(fresh or {}).get('as_of', 'unknown')} "
              f"({(fresh or {}).get('n_problems', '?')} problems) | PH data as of {(ph or {}).get('as_of', 'unknown')}")
     for s in stale:
         L.append(f"  ~ {s}")
+    L.extend(rl)
     L.append("")
 
-    live = live_plans(plans, results)
     n_soon = 0
     for book in ("PH", "US"):
         group = sorted([p for p in live if (p.get("book") or "US") == book], key=lambda p: p["symbol"])
@@ -238,6 +329,8 @@ def build(today: dt.date, plans: list[dict], results: dict, meta: dict, fresh: d
             sym = p["symbol"]
             state = f"open, filled {p['_fill']}" + (f" on {p['_fill_ts'][:10]}" if p.get("_fill_ts") else "") if p["_state"] == "open" \
                 else f"planned {p.get('plan_ts', '')[:10]}, trigger {p.get('entry')} stop {p.get('stop')}"
+            rk = plan_risk(p)
+            state += "  | risk unknown" if rk["unknown"] else f"  | risk {rk['r']:.2f}R"
             L.append(f"  {sym:<6} {state}")
             items: list[tuple[dt.date, str, str]] = []
             if book == "PH":
@@ -266,6 +359,7 @@ def build(today: dt.date, plans: list[dict], results: dict, meta: dict, fresh: d
         L.append("")
     L.append("Notes: weekdays only, no holiday calendar. US single-name earnings not checked (no free source). PH expected dates are "
              "'last year +365 days' estimates. A US fill at IBKR is not in the mirror, so a filled US plan still reads planned.")
+    n_soon += sum(1 for b, r in open_risk(live).items() if r["status"] == "OVER" or r["live_status"] == "OVER")
     return "\n".join(L) + "\n", n_soon
 
 
@@ -306,7 +400,7 @@ def main() -> int:
     open(a.out, "w").write(text)
     print(text, end="")
     if a.notify and n_soon:
-        msg = f"{n_soon} item(s) within {SOON_TRADING_DAYS} trading days: see out/positions_calendar.txt"
+        msg = f"{n_soon} flag(s) (events within {SOON_TRADING_DAYS} trading days, or open risk over cap): see out/positions_calendar.txt"
         subprocess.run(["osascript", "-e", f'display notification "{msg}" with title "Positions calendar"'], check=False)
     return 0
 

@@ -123,5 +123,70 @@ t6, _ = P.build(today, [{"id": "X", "symbol": "XXX", "book": "PH", "status": "pl
                          "exit_by": "2027-03-01"}], {}, meta, fresh, ph, [], now)
 check("exit_by outside the window said so", "outside the window" in t6, True)
 
+# ── open risk (handoff 01) ───────────────────────────────────────────────────────────────────────
+def lp(sym, book, entry, stop, shares, fill=None, **kw):
+    pl = {"id": sym, "symbol": sym, "book": book, "status": "planned", "plan_ts": "2026-11-05T00:00:00Z", "entry": entry, "stop": stop, "shares": shares}
+    pl.update(kw)
+    res = {sym: {"fill": fill, "exit": None, "ts": "2026-11-05T00:00:00Z"}} if fill is not None else {}
+    return pl, res
+
+def live_of(*pairs):
+    pl = [a for a, _ in pairs]
+    rs = {}
+    for _, r in pairs:
+        rs.update(r)
+    return P.live_plans(pl, rs)
+
+r1 = P.plan_risk(live_of(lp("A", "PH", 15.5, 15, 50000, fill=15.55))[0])
+check("open uses the fill, not the entry: 27,500 / 25,000 = 1.10R", round(r1["r"], 2), 1.10)
+r2 = P.plan_risk(live_of(lp("A", "PH", 15.5, 15, 50000))[0])
+check("planned uses the entry: 25,000 = 1.00R", round(r2["r"], 2), 1.00)
+r3 = P.plan_risk(live_of(lp("A", "PH", 15.5, 16, 50000, fill=15.55))[0])
+check("stop above fill is 0R, never negative", (r3["r"], r3["locked"]), (0.0, True))
+for name, kw in (("no stop", {"stop": None}), ("zero shares", {"shares": 0}), ("text shares", {"shares": "abc"})):
+    pl, rs = lp("A", "PH", 15.5, 15, 50000, fill=15.55)
+    pl.update(kw)
+    check(f"{name}: risk unknown", P.plan_risk(P.live_plans([pl], rs)[0])["unknown"], True)
+pl, rs = lp("A", "PH", 15.5, 15, 50000, fill=15.55)
+lv_ = P.live_plans([pl], rs)
+lv_[0]["_fill"] = None
+check("open trade with no fill: risk unknown", P.plan_risk(lv_[0])["unknown"], True)
+
+check("1.39% under", P.cap_status(1.39), "under")
+check("1.40% at cap", P.cap_status(1.40), "AT CAP")
+check("1.50% at cap", P.cap_status(1.50), "AT CAP")
+check("1.51% OVER", P.cap_status(1.51), "OVER")
+check("1.504% rounds to 1.50, at cap", P.cap_status(1.504), "AT CAP")
+
+# book: 5 open + 1 planned (PH) and one planned US; closed and not-triggered ignored
+ph_open = [lp("ALI", "PH", 15.5, 15, 50000, fill=15.55), lp("BLOOM", "PH", 1.92, 1.8, 208333, fill=1.91),
+           lp("JFC", "PH", 145, 138, 3571, fill=147), lp("JGS", "PH", 17.5, 16.5, 25000, fill=17.5), lp("MBT", "PH", 62, 60, 12500, fill=62.3)]
+smph = lp("SMPH", "PH", 17.8, 16.8, 25000)
+mort = lp("MORT", "US", 8, 7.5, 1200)
+wday = lp("WDAY", "US", 195.5, 184.5, 54, status="not triggered")
+closed = lp("OLD", "PH", 10, 9, 1000, fill=10)
+closed[1]["OLD"]["exit"] = 11
+live = live_of(*ph_open, smph, mort, wday, closed)
+rk = P.open_risk(live)
+check("PH live 5.45R = 1.36%", (round(rk["PH"]["live_r"], 2), rk["PH"]["live_pct"]), (5.45, 1.36))
+check("PH if all trigger 6.45R = 1.61% OVER", (round(rk["PH"]["all_r"], 2), rk["PH"]["all_pct"], rk["PH"]["status"]), (6.45, 1.61, "OVER"))
+check("US live 0, if all trigger 1R = 0.25% under", (rk["US"]["live_pct"], rk["US"]["all_pct"], rk["US"]["status"]), (0.0, 0.25, "under"))
+check("not triggered and closed plans left out", sorted(i["symbol"] for i in rk["US"]["items"] + rk["PH"]["items"]),
+      sorted(["ALI", "BLOOM", "JFC", "JGS", "MBT", "SMPH", "MORT"]))
+rl = P.risk_lines(live)
+check("OVER line leads", rl[0].startswith("!! OPEN RISK OVER CAP: PH if all trigger 1.61%"), True)
+check("combined sum, no cap", "combined 1.86% if all trigger (for information, no cap)" in " ".join(rl), True)
+check("partials not seen printed", "partials not seen" in " ".join(rl), True)
+rk0 = P.open_risk([])
+check("empty book shows 0.00% under", (rk0["PH"]["all_pct"], rk0["PH"]["status"]), (0.0, "under"))
+pl_u, rs_u = lp("Q", "PH", 15.5, 15, 50000)
+pl_u["stop"] = None
+rlu = P.risk_lines(P.live_plans([pl_u], rs_u))
+check("unknown risk: INCOMPLETE and 'at least', never zero", ("INCOMPLETE (1 unknown)" in rlu[0], "at least" in rlu[0], "Q risk unknown" in " ".join(rlu)), (True, True, True))
+tx, ns = P.build(today, [a for a, _ in ph_open] + [smph[0], mort[0]], {k: v for _, r in ph_open for k, v in r.items()}, meta,
+                 fresh | {"as_of": "2026-11-06", "n_problems": 0}, ph, [], now)
+check("build: first line is the OVER flag, RISK line under the header, per-plan risk shown",
+      (tx.splitlines()[0].startswith("!! OPEN RISK OVER CAP"), "\nRISK  PH live" in tx, "| risk 1.10R" in tx), (True, True, True))
+
 print("FAILS:", fails)
 sys.exit(1 if fails else 0)
