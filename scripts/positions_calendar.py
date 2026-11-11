@@ -479,6 +479,11 @@ def main() -> int:
     now = dt.datetime.now(dt.timezone.utc)
     live = live_plans(plans, results)
     mem = calendar_events(today, now, live, meta, fresh, ph, errors)
+    try:   # no-token trigger for the release-day read (handoff 07); the read itself is a gated Claude run
+        import release_trigger
+        mem.extend(release_trigger.run(today, live, fresh, ph))
+    except Exception as exc:  # noqa: BLE001
+        errors.append(f"release trigger not run: {exc}")
     rg = regime_event(current_regime(), os.path.join(os.path.dirname(EV.path()), "events_state.json"), today)
     if rg:
         mem.append(rg)
@@ -506,6 +511,11 @@ def main() -> int:
     os.makedirs(os.path.dirname(a.out), exist_ok=True)
     open(a.out, "w").write(text)
     print(text, end="")
+    try:   # no-token trigger for the thesis fact-check run (handoff 06); queues ids only, the run itself is gated
+        import thesis_trigger
+        thesis_trigger.run(a.mirror, today=today, log=True)
+    except Exception as exc:  # noqa: BLE001
+        print(f"(thesis trigger not run: {exc})")
     try:   # the watch table runs as a second step of this job (no separate schedule); a failure here never breaks the calendar
         import watch_table
         watch_table.main(["--mirror", a.mirror], echo=False)
