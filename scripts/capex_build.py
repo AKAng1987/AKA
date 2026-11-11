@@ -66,12 +66,16 @@ def main() -> int:
         snap = cd.build_snapshot()
     n = sum(1 for c in snap["companies"] if c["cq"])
     print(f"{len(snap['companies'])} companies read, {n} with capex, {len(snap['failed'])} failed {snap['failed'][:12]}")
+    nd = sum(1 for c in snap["companies"] if c.get("dq"))
+    print(f"{nd} companies with a debt balance")
     if a.out:
         json.dump(snap, open(a.out, "w"), separators=(",", ":"))
         print("wrote", a.out)
     if a.upload:
         if n < 300:
             return _fail(f"refusing to upload: only {n} companies have capex (expect 400+)")
+        if nd < 250:
+            return _fail(f"refusing to upload: only {nd} companies have a debt balance (expect 350+)")
         old = cd.read_snapshot()
         if old:
             n_old = sum(1 for c in old["companies"] if c["cq"])
