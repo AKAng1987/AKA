@@ -1,6 +1,7 @@
 {
   "_note": "Channels scanned by scripts/yt_scan.py. kind decides the window and where results go: live_call -> /cgi-thesis (expires), rule -> /video-to-study backlog, method -> only if usable, background -> monthly skim, dormant -> existence check only. Agreed with Arvin 2026-10-09.",
   "windows_days": {"live_call": 14, "rule": 3650, "method": 3650, "background": 31, "dormant": 0},
+  "forward_windows_days": {"live_call": 3, "rule": 8, "method": 8, "background": 31, "dormant": 0},
   "channels": [
     {"handle": "42Macro", "kind": "live_call"}, {"handle": "Fedguy12", "kind": "live_call"},
     {"handle": "DoubleLineCapital", "kind": "live_call"}, {"handle": "macrovoices7508", "kind": "live_call"},
@@ -9,6 +10,7 @@
     {"handle": "morganstanley", "kind": "live_call"}, {"handle": "GoldmanSachs", "kind": "live_call"},
     {"handle": "jpmorgan", "kind": "live_call"}, {"handle": "federalreserve", "kind": "live_call"},
     {"handle": "CapitalFlowsResearch", "kind": "live_call"},
+    {"handle": "bravosresearch", "kind": "live_call"},
     {"handle": "Trader-Mindset-IVT", "kind": "rule"}, {"handle": "TheOneLanceB", "kind": "rule"},
     {"handle": "smbcapital", "kind": "rule"}, {"handle": "TheRealMarkMinervini", "kind": "rule"},
     {"handle": "JLawStock2", "kind": "rule"}, {"handle": "AswathDamodaranonValuation", "kind": "rule"},

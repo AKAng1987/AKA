@@ -11,6 +11,8 @@ The model then reads only the top few transcripts (/video-to-study scan mode).
   python3 scripts/yt_scan.py --kind live_call --top 5
   python3 scripts/yt_scan.py --due --top 5      # scheduled run: live calls daily, rules Sat, background monthly
   python3 scripts/yt_scan.py --channels 42Macro,MarketsUnscripted --dry-run   # test; does not mark seen
+  python3 scripts/yt_scan.py --due --top 5 --raw ~/video_intake/raw | python3 ~/video_intake/gemini_extract.py --max 5 -
+                                             # Gemini-reader flow: raw/<id>.json is the "seen" record, not yt_seen.json
 
 Needs youtube-transcript-api: it re-runs itself inside ~/.cgi/ytvenv if that exists (create with
 `python3 -m venv ~/.cgi/ytvenv && ~/.cgi/ytvenv/bin/pip install youtube-transcript-api`).
@@ -70,8 +72,10 @@ def uploads(cid: str) -> list[dict]:
     root = ET.fromstring(xml)
     out = []
     for e in root.findall("a:entry", NS):
+        d = e.find("media:group/media:description", NS)
         out.append({"id": e.find("yt:videoId", NS).text, "title": e.find("a:title", NS).text,
                     "published": e.find("a:published", NS).text[:10],
+                    "description": ((d.text or "")[:400] if d is not None else ""),
                     "url": f"https://www.youtube.com/watch?v={e.find('yt:videoId', NS).text}"})
     return out
 
@@ -211,12 +215,18 @@ def main() -> int:
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--due", action="store_true", help="scan only the kinds scheduled for today")
     ap.add_argument("--max-transcripts", type=int, default=20, help="most transcripts to fetch in one run (newest first, channels in rotation)")
+    ap.add_argument("--raw", help="extractor output dir (~/video_intake/raw). A video with <id>.json there counts as seen, and the "
+                                  "shortlist is NOT marked seen: the extractor's file is the record, so a failed Gemini run retries. "
+                                  "Also lets videos with a blocked transcript onto the shortlist, scored on title + description.")
     a = ap.parse_args()
     cfg = json.loads((ROOT / "config" / "yt_sources.json").read_text())
     STATE.mkdir(exist_ok=True)
     seen_p, ids_p = STATE / "yt_seen.json", STATE / "yt_channel_ids.json"
     seen = set(json.loads(seen_p.read_text())) if seen_p.exists() else set()
     ids = json.loads(ids_p.read_text()) if ids_p.exists() else {}
+    if a.raw:
+        rawdir = pathlib.Path(a.raw).expanduser()
+        seen |= {p.stem for p in rawdir.glob("*.json") if re.fullmatch(r"[A-Za-z0-9_-]{11}", p.stem)}
     tickers, watch, today = universe(), watch_symbols(), dt.date.today()
     kinds = due_kinds(today) if a.due else ([a.kind] if a.kind else None)
     if a.due and not kinds:
@@ -240,7 +250,9 @@ def main() -> int:
             vids = fetch_uploads(c["handle"], cid)
         except Exception as exc:
             problems.append(f"{c['handle']}: {exc}"); continue
-        win = cfg["windows_days"][c["kind"]]
+        # The Gemini-reader flow (--raw) is forward-looking: only recent uploads, no backlog. The config's
+        # forward_windows_days replaces the old "rules at any age" and 14-day live-call windows for it.
+        win = (cfg.get("forward_windows_days") or cfg["windows_days"])[c["kind"]] if a.raw else cfg["windows_days"][c["kind"]]
         for v in vids:
             age = (today - dt.date.fromisoformat(v["published"])).days
             if age > win or v["id"] in seen:
@@ -256,14 +268,15 @@ def main() -> int:
         if k >= a.max_transcripts:
             unread.append(v); continue
         t = transcript(v["id"])
-        s = score(t, tickers, watch) if t else {"rule_phrases": 0, "macro_terms": 0, "tickers": [], "watch_hits": [], "chars": 0}
-        pts = (s["rule_phrases"] * 3 + min(s["macro_terms"], 40) + 2 * len(s["tickers"])
-               + 4 * len(s["watch_hits"])) if t else -1
-        rows.append({**v, "has_transcript": bool(t), "score": pts, **s})
-    rows.sort(key=lambda r: (-r["score"], r["age_days"]))
-    short = [r for r in rows if r["has_transcript"]][: a.top]
+        # Transcripts are IP-blocked more often than not; the title and description are all that is left to rank on.
+        s = score(t or f"{v['title']} {v.get('description', '')}", tickers, watch)
+        pts = s["rule_phrases"] * 3 + min(s["macro_terms"], 40) + 2 * len(s["tickers"]) + 4 * len(s["watch_hits"])
+        rows.append({**v, "has_transcript": bool(t), "scored_on": "transcript" if t else "title+description", "score": pts, **s})
+    rows.sort(key=lambda r: (not r["has_transcript"], -r["score"], r["age_days"]))   # read transcripts first, then title-ranked
+    pool = rows if a.raw else [r for r in rows if r["has_transcript"]]               # only the Gemini reader takes title-only videos
+    short = pool[: a.top]
     ids_p.write_text(json.dumps(ids, indent=1))
-    if not a.dry_run:
+    if not a.dry_run and not a.raw:
         seen |= {r["id"] for r in short}
         seen_p.write_text(json.dumps(sorted(seen)))
     print(json.dumps({"due": kinds, "watch_symbols": len(watch), "dormant_revived": revived,
