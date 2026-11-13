@@ -30,6 +30,9 @@ J = [
 ]
 check("only new, long, day/week entries queue", [e["id"] for e in T.new_theses(J, set(), today)], ["a", "e"])
 check("an already queued entry is not queued again", [e["id"] for e in T.new_theses(J, {"a"}, today)], ["e"])
+NOTE = {"id": "n1", "type": "day", "ts": "2026-11-09T05:00:00Z", "text": "Fact-check of Flow entry a (2026-11-09) " + long_t, "source": "thesis fact-check a"}
+NOTE2 = {"id": "n2", "type": "day", "ts": "2026-11-09T05:00:00Z", "text": "Fact-check of Flow entry a " + long_t}          # text only, no source field
+check("the fact-check's own note is never queued (by source, or by its opening words)", [e["id"] for e in T.new_theses(J + [NOTE, NOTE2], set(), today)], ["a", "e"])
 check("body-only entries are counted by their words", T.words(J[4]), 200)
 
 d = tempfile.mkdtemp()

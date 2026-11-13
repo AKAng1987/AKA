@@ -28,9 +28,17 @@ def words(j: dict) -> int:
     return len(re.sub(r"&nbsp;|&[a-z]+;", " ", t).split())
 
 
+def is_fact_check_note(j: dict) -> bool:
+    """The fact-check files its own note into Flow (source 'thesis fact-check <id>'); it must never be queued as a thesis."""
+    t = (j.get("text") or re.sub(r"<[^>]+>", " ", j.get("body") or "")).lstrip()
+    return str(j.get("source") or "").startswith(("thesis fact-check", "release read")) or t.startswith(("Fact-check of Flow entry", "Release read"))
+
+
 def new_theses(journal: list[dict], queued: set[str], today: dt.date) -> list[dict]:
     out = []
     for j in journal:
+        if is_fact_check_note(j):
+            continue
         if j.get("type") not in TYPES or j.get("id") in queued or words(j) <= MIN_WORDS:
             continue
         try:
