@@ -97,6 +97,16 @@ def scan(state: dict, today: dt.date, log=print) -> dict:
     return state
 
 
+def keep_posted_events(state: dict, current: dict) -> dict:
+    """The scan takes minutes between its first read of ph/index.json and its write. An announcement-day task can POST
+    /api/ph/index_events in that gap (2026-11-12: the MSCI events were lost this way). Right before writing, fold in whatever
+    events the stored copy holds now, so a read-modify-write never drops them. Pure."""
+    import ph_index as I
+
+    state["events"] = I.merge_events(current.get("events") or [], state.get("events") or [])
+    return state
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--upload", action="store_true")
@@ -108,6 +118,7 @@ def main() -> int:
     state = scan(old, dt.date.today())
     print(f"last scanned {state['last_scanned']}; {len(state.get('events', []))} events; PSEi members {len(state.get('psei_members', []))}")
     if a.upload:
+        state = keep_posted_events(state, ph_data.read_blob("index") or {})   # re-read just before the write
         ph_data.write_blob("index", state)
         print("stored ph/index.json")
     return 0
