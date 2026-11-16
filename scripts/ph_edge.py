@@ -332,6 +332,33 @@ def parse_detail(html: str, chip_name: str) -> dict:
     return out
 
 
+def program_range(text: str) -> Optional[tuple]:
+    """'PHP5 to 10 Billion' -> (5e9, 10e9); 'Php 5 - 10 Billion' too. A single figure returns None (money() handles it)."""
+    t = (text or "").replace(",", "")
+    m = re.search(r"([\d.]+)\s*(?:to|-|\u2013)\s*([\d.]+)\s*(billion|million|B|M)?\b", t, flags=re.I)
+    if not m:
+        return None
+    mult = {"b": 1e9, "billion": 1e9, "m": 1e6, "million": 1e6}.get((m.group(3) or "").lower(), 1.0)
+    try:
+        lo, hi = float(m.group(1)) * mult, float(m.group(2)) * mult
+    except ValueError:
+        return None
+    return (lo, hi) if lo and hi and lo < hi else None
+
+
+def program_shares(text: str) -> Optional[float]:
+    """A program stated in shares inside the free-text note: '... is for up to 110 million shares' -> 110e6."""
+    t = (text or "").replace(",", "")
+    m = re.search(r"(?:up to|maximum of|not exceeding)\s*([\d.]+)\s*(billion|million)?\s*(?:common\s*)?shares", t, flags=re.I)
+    if not m:
+        return None
+    mult = {"billion": 1e9, "million": 1e6}.get((m.group(2) or "").lower(), 1.0)
+    try:
+        return float(m.group(1)) * mult
+    except ValueError:
+        return None
+
+
 def parse_buyback(html: str) -> Optional[dict]:
     """Form 9-1 Share Buy-Back Transactions (inside a 17-C cover)."""
     trades, cum = [], {}
@@ -360,13 +387,23 @@ def parse_buyback(html: str) -> Optional[dict]:
                 elif k.startswith("Total Amount of Shares Repurchased"):
                     cum["total_repurchased"] = money(texts[1])
                 elif k.startswith("Total Amount Appropriated"):
-                    cum["appropriated"] = money(texts[1])
+                    rng = program_range(texts[1])
+                    if rng:                      # "PHP5 to 10 Billion": a range, never the first number alone
+                        cum["appropriated_low"], cum["appropriated_high"] = rng
+                        cum["appropriated"] = rng[1]
+                    else:
+                        cum["appropriated"] = money(texts[1])
+                elif k.startswith("Other Relevant Information"):
+                    note = " ".join(texts[1:])
                 elif k.startswith("Outstanding Shares") and len(texts) >= 3:
                     cum["outstanding_before"], cum["outstanding_after"] = num(texts[1]), num(texts[2])
                 elif k.startswith("Treasury Shares") and len(texts) >= 3:
                     cum["treasury_before"], cum["treasury_after"] = num(texts[1]), num(texts[2])
     if not trades:
         return None
+    ps = program_shares(re.sub(r"<[^>]+>", " ", html))
+    if ps:
+        cum["program_shares"] = ps
     shares = sum(x["shares"] for x in trades)
     value = sum(x["shares"] * x["price"] for x in trades)
     return {"report_date": report_date or max(x["date"] for x in trades), "first": min(x["date"] for x in trades),

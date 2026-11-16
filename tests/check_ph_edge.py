@@ -52,6 +52,11 @@ check("buyback total repurchased", b["total_repurchased"], 15.84e9)
 check("buyback dates", (b["report_date"], b["first"], b["last"]), ("2026-10-28", "2026-10-28", "2026-10-28"))
 check("buyback avg price in range", 820 < b["avg_price"] < 840, True)
 check("buyback n trades", b["n_trades"], 27)
+check("program range: PHP5 to 10 Billion", e.program_range("PHP5 to 10 Billion"), (5e9, 10e9))
+check("program range: single figure is not a range", e.program_range("Php16.24B"), None)
+check("program shares: up to 110 million shares", e.program_shares("is for up to 110 million shares."), 110e6)
+check("program shares: no match", e.program_shares("approved by the Board"), None)
+check("buyback fixture keeps its appropriated figure untouched", b.get("appropriated_low"), None)
 
 # listings
 l = e.parse_listing(fx("ann_buyback.html"))
