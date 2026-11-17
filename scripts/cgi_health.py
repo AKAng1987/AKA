@@ -56,10 +56,14 @@ def _days_before(iso: str, n: int) -> str:
 
 
 def main() -> int:
+    as_json = "--json" in sys.argv   # machine-readable verdict for cgi_repair.py; no events are logged in this mode
     red, amber, lines = [], [], []
     try:
         f = json.loads(_get("/api/freshness"))
     except Exception as exc:  # noqa: BLE001
+        if as_json:
+            print(json.dumps({"verdict": "RED", "red": [f"site unreachable: {exc}"], "amber": [], "as_of": None}))
+            return 2
         print(f"RED   site unreachable: {exc}")
         return 2
 
@@ -159,6 +163,9 @@ def main() -> int:
         amber.append(f"could not read brief: {exc}")
 
     verdict = "RED" if red else "AMBER" if amber else "GREEN"
+    if as_json:
+        print(json.dumps({"verdict": verdict, "red": red, "amber": amber, "as_of": f.get("as_of")}))
+        return 0 if verdict == "GREEN" else 1
     try:
         import datetime as _dt, os as _os
         sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))

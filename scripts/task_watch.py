@@ -41,6 +41,7 @@ SLOTS = {
     "cgi-weekly-decks":             ([6],      "07:01", 3.0),
     "refresh-customer-links-cache": ([6],      "06:41", 3.0),
     "season-desk-daily-refresh":    (range(7), "16:36", 2.0),
+    "cgi-repair":                   (range(5), "09:00", 2.0),
     "pulse-mirror-sync":            (range(7), "07:24", 2.0),   # cron 07:10 plus the app's fixed delay
 }
 LOOKBACK_DAYS = {"daily": 3, "weekly": 8}
