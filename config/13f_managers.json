@@ -1,0 +1,30 @@
+{
+  "note": "The 13F managers CGI tracks (about 25, chosen 2026-11-19). 'cik' stays null until the EDGAR filer is confirmed: run `filings_build.py --resolve-managers`, check each match by eye, then fill in the number. Edit this file any time. No index giants (Vanguard, BlackRock): they hold everything and add only noise.",
+  "managers": [
+    {"name": "Berkshire Hathaway", "cik": null},
+    {"name": "Bridgewater Associates", "cik": null},
+    {"name": "Renaissance Technologies", "cik": null},
+    {"name": "Citadel Advisors", "cik": null},
+    {"name": "Two Sigma Investments", "cik": null},
+    {"name": "D. E. Shaw", "cik": null},
+    {"name": "Millennium Management", "cik": null},
+    {"name": "AQR Capital Management", "cik": null},
+    {"name": "Point72 Asset Management", "cik": null},
+    {"name": "Tiger Global Management", "cik": null},
+    {"name": "Coatue Management", "cik": null},
+    {"name": "Viking Global Investors", "cik": null},
+    {"name": "Lone Pine Capital", "cik": null},
+    {"name": "Pershing Square Capital Management", "cik": null},
+    {"name": "Third Point", "cik": null},
+    {"name": "Elliott Investment Management", "cik": null},
+    {"name": "ValueAct Holdings", "cik": null},
+    {"name": "Greenlight Capital", "cik": null},
+    {"name": "Appaloosa", "cik": null},
+    {"name": "Baupost Group", "cik": null},
+    {"name": "Soros Fund Management", "cik": null},
+    {"name": "Duquesne Family Office", "cik": null},
+    {"name": "Scion Asset Management", "cik": null},
+    {"name": "Maverick Capital", "cik": null},
+    {"name": "Jana Partners", "cik": null}
+  ]
+}
