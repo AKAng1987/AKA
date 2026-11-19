@@ -243,6 +243,68 @@ def funds_summary(cur: dict, prior: dict, cmap: dict) -> dict:
     return out
 
 
+def manager_view(cur_h: dict, pri_h: dict | None, cmap: dict, top: int = 40) -> dict:
+    """One manager's book: largest positions (plus any position in the Fundamentals universe), what changed against the prior quarter, and
+    what was exited. cur_h / pri_h = {cusip: {issuer, shares, value}} (equity only). Values are dollars."""
+    total = sum(h["value"] for h in cur_h.values())
+    rows = []
+    for cusip, h in cur_h.items():
+        before = (pri_h or {}).get(cusip, {}).get("shares") if pri_h is not None else None
+        if pri_h is None:
+            change = None
+        elif before is None:
+            change = "new"
+        elif h["shares"] > before:
+            change = "added"
+        elif h["shares"] < before:
+            change = "reduced"
+        else:
+            change = "unchanged"
+        rows.append({"cusip": cusip, "issuer": h["issuer"], "symbol": cmap.get(cusip), "shares": h["shares"], "value": h["value"],
+                     "weight_pct": round(h["value"] / total * 100, 2) if total else None, "change": change,
+                     "change_pct": round((h["shares"] / before - 1) * 100, 1) if before else None})
+    rows.sort(key=lambda r: -r["value"])
+    keep = rows[:top] + [r for r in rows[top:] if r["symbol"]]
+    exited = sorted(({"cusip": c, "issuer": h["issuer"], "symbol": cmap.get(c), "prior_value": h["value"]}
+                     for c, h in (pri_h or {}).items() if c not in cur_h), key=lambda x: -x["prior_value"])[:10]
+    return {"total_value": total, "n_positions": len(cur_h), "top10_share": round(sum(r["value"] for r in rows[:10]) / total * 100, 1) if total else None,
+            "holdings": keep, "exited": exited}
+
+
+def crowd(cur: dict, pri: dict, cmap: dict, top: int = 25) -> dict:
+    """Across the tracked managers, for EVERY name (not only the Fundamentals universe): most held, most added, most reduced.
+    Counts are managers: added = raised shares or opened a position; reduced = cut shares or exited. Needs a prior quarter per manager."""
+    agg: dict = {}
+
+    def row(c, h):
+        return agg.setdefault(c, {"cusip": c, "issuer": h["issuer"], "symbol": cmap.get(c), "holders": 0, "adds": 0, "cuts": 0, "new": 0,
+                                  "exited": 0, "value": 0.0})
+
+    for mgr, hs in cur.items():
+        p = pri.get(mgr)
+        for c, h in hs.items():
+            a = row(c, h)
+            a["holders"] += 1
+            a["value"] += h["value"]
+            if p is not None:
+                b = p.get(c, {}).get("shares")
+                if b is None:
+                    a["new"] += 1
+                elif h["shares"] > b:
+                    a["adds"] += 1
+                elif h["shares"] < b:
+                    a["cuts"] += 1
+        if p is not None:
+            for c, h in p.items():
+                if c not in hs:
+                    row(c, h)["exited"] += 1
+    rows = list(agg.values())
+    held = sorted((r for r in rows if r["holders"] > 0), key=lambda r: (-r["holders"], -r["value"]))[:top]
+    added = sorted((r for r in rows if r["adds"] + r["new"] > 0), key=lambda r: (-(r["adds"] + r["new"]), -r["holders"]))[:top]
+    reduced = sorted((r for r in rows if r["cuts"] + r["exited"] > 0), key=lambda r: (-(r["cuts"] + r["exited"]), -r["holders"]))[:top]
+    return {"most_held": held, "most_added": added, "most_reduced": reduced, "n_managers": len(cur), "n_with_prior": sum(1 for m in cur if pri.get(m) is not None)}
+
+
 def parse_13d(xml_text: str, form: str) -> dict:
     """Best effort on the structured 13D/G XML (names differ by schema version); anything not found stays None, never guessed."""
     try:
@@ -468,8 +530,11 @@ def run_13f(sec: Sec, uni: dict, dry: bool) -> int:
     if len(rows) < 0.6 * len(mgrs):
         print("REFUSING to upload: under 60% of the managers could be read")
         return 1
+    by_manager = {m: manager_view(h, pri.get(m), cmap) for m, h in cur.items()}
+    crowd_all = crowd(cur, pri, cmap)
     s3_put("funds.json", {"asof": dt.date.today().isoformat(), "period": max(periods) if periods else None,
                           "filed_by": max(r["filed"] for r in rows), "managers": rows, "mapping": rep, "summary": summ,
+                          "by_manager": by_manager, "crowd": crowd_all,
                           "note": "13F: long US positions of tracked managers, up to 4.5 months old; crowding, not a signal"})
     meta = s3_get("meta.json") or {}
     meta["f13_period"] = max(periods) if periods else None

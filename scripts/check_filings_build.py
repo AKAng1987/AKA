@@ -98,7 +98,30 @@ check("funds: X held by 2, one add (M1), one unchanged (M2)", (fs["X"]["holders"
 check("funds: Y was cut", (fs["Y"]["holders"], fs["Y"]["cuts"]), (1, 1))
 check("funds: Z exited, W new", (fs["Z"]["exited"], fs["W"]["new"]), (1, 1))
 
-D13 = "<edgarSubmission><formData><coverPageHeader><reportingPersonName>BIG HOLDER LP</reportingPersonName></coverPageHeader><percentOfClass>7.4</percentOfClass></formData></edgarSubmission>"
+cur2 = {"M1": {"C1": {"issuer": "ALPHA", "shares": 200.0, "value": 800.0}, "C2": {"issuer": "BETA", "shares": 50.0, "value": 100.0},
+               "C4": {"issuer": "DELTA", "shares": 5.0, "value": 100.0}},
+        "M2": {"C1": {"issuer": "ALPHA", "shares": 80.0, "value": 400.0}, "C2": {"issuer": "BETA", "shares": 90.0, "value": 200.0}}}
+pri2 = {"M1": {"C1": {"issuer": "ALPHA", "shares": 100.0, "value": 1.0}, "C2": {"issuer": "BETA", "shares": 80.0, "value": 1.0},
+               "C3": {"issuer": "GAMMA", "shares": 40.0, "value": 300.0}},
+        "M2": {"C1": {"issuer": "ALPHA", "shares": 80.0, "value": 1.0}, "C2": {"issuer": "BETA", "shares": 60.0, "value": 1.0}}}
+mv = F.manager_view(cur2["M1"], pri2["M1"], {"C1": "AAA"}, top=2)
+check("manager view: total, positions, top-10 share", (mv["total_value"], mv["n_positions"], mv["top10_share"]), (1000.0, 3, 100.0))
+check("manager view: changes vs prior quarter", {r["issuer"]: r["change"] for r in mv["holdings"]}, {"ALPHA": "added", "BETA": "reduced"})
+check("manager view: weight and change percent", (mv["holdings"][0]["weight_pct"], mv["holdings"][0]["change_pct"], mv["holdings"][0]["symbol"]), (80.0, 100.0, "AAA"))
+check("manager view: exited position listed", [(e["issuer"], e["prior_value"]) for e in mv["exited"]], [("GAMMA", 300.0)])
+check("manager view: the new position is outside top 2 and unmapped, so not kept", [r["issuer"] for r in mv["holdings"]], ["ALPHA", "BETA"])
+mv0 = F.manager_view(cur2["M1"], None, {})
+check("manager view: no prior quarter means no change labels", mv0["holdings"][0]["change"], None)
+cw = F.crowd(cur2, pri2, {"C1": "AAA"})
+byi = {r["issuer"]: r for r in cw["most_held"]}
+check("crowd: ALPHA held by 2, one add (M1), one unchanged", (byi["ALPHA"]["holders"], byi["ALPHA"]["adds"], byi["ALPHA"]["cuts"]), (2, 1, 0))
+check("crowd: BETA one add (M2) and one cut (M1)", (byi["BETA"]["adds"], byi["BETA"]["cuts"]), (1, 1))
+check("crowd: most held order", [r["issuer"] for r in cw["most_held"]][:2], ["ALPHA", "BETA"])
+check("crowd: most added includes DELTA (new) and the adds", sorted(r["issuer"] for r in cw["most_added"]), ["ALPHA", "BETA", "DELTA"])
+check("crowd: most reduced includes the exit GAMMA and the BETA cut", sorted(r["issuer"] for r in cw["most_reduced"]), ["BETA", "GAMMA"])
+check("crowd: counts", (cw["n_managers"], cw["n_with_prior"]), (2, 2))
+
+D13 ="<edgarSubmission><formData><coverPageHeader><reportingPersonName>BIG HOLDER LP</reportingPersonName></coverPageHeader><percentOfClass>7.4</percentOfClass></formData></edgarSubmission>"
 check("13D: stake and filer when present", F.parse_13d(D13, "SCHEDULE 13D"), {"stake_pct": 7.4, "filer": "BIG HOLDER LP"})
 check("13D: unknown layout stays None", F.parse_13d("<x/>", "SC 13D"), {"stake_pct": None, "filer": None})
 check("index url", F.daily_index_url(dt.date(2026, 11, 18)), "https://www.sec.gov/Archives/edgar/daily-index/2026/QTR4/form.20261118.idx")
