@@ -66,7 +66,7 @@ class Sec:
                 req = urllib.request.Request(url, headers={"User-Agent": self.ua, "Accept-Encoding": "identity"})
                 return urllib.request.urlopen(req, timeout=60).read().decode("utf-8", "replace")
             except urllib.error.HTTPError as e:
-                if e.code == 404:
+                if e.code == 404 or (e.code == 403 and "daily-index" in url):   # no index file for a holiday: the archive answers 403
                     return None
                 if e.code in (429, 500, 502, 503):
                     time.sleep(2 * (i + 1))
@@ -387,11 +387,14 @@ def resolve_managers(sec: Sec) -> int:
     for m in managers():
         q = urllib.request.quote(m["name"])
         t = sec.get(f"https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&company={q}&type=13F-HR&owner=include&count=10&output=atom") or ""
-        cands = re.findall(r"<conformed-name>(.*?)</conformed-name>\s*<cik>(\d+)</cik>", t, re.S)
-        seen = []
-        for nm, cik in cands:
-            if (nm, cik) not in seen:
-                seen.append((nm, cik))
+        # one matching filer: <cik> then <conformed-name> in the company-info block; several: an HTML list with CIK= links
+        one = re.search(r"<cik>(\d+)</cik>\s*<conformed-name>(.*?)</conformed-name>", t, re.S)
+        seen = [(one.group(2), one.group(1))] if one else []
+        if not seen:
+            h = sec.get(f"https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&company={q}&type=13F-HR&owner=include&count=10") or ""
+            for cik, nm in re.findall(r"CIK=(\d{10})[^>]*>\s*([^<]{3,80}?)\s*<", h):
+                if (nm, cik) not in seen:
+                    seen.append((nm, cik))
         print(f"{m['name']:34s} config cik {m.get('cik')}  candidates: " + ("; ".join(f"{n} [{c}]" for n, c in seen[:4]) or "none found"))
     return 0
 
@@ -432,10 +435,18 @@ def run_13f(sec: Sec, uni: dict, dry: bool) -> int:
         print("No manager has a confirmed cik in config/13f_managers.json. Run --resolve-managers, check the matches, then fill in the cik values.")
         return 1
     cur, pri, rows, periods = {}, {}, [], set()
+    lists = {m["name"]: recent_13f(sec, int(m["cik"])) for m in mgrs}
+    common = max((fl[0]["period"] for fl in lists.values() if fl), default=None)   # the newest quarter anyone has filed
     for m in mgrs:
-        fl = recent_13f(sec, int(m["cik"]))
+        fl = lists[m["name"]]
         if not fl:
             print(f"  {m['name']}: no 13F-HR found"); continue
+        if fl[0]["period"] != common:
+            # never mix quarters in one crowding count: a manager with no filing for the newest quarter is listed, not counted
+            rows.append({"manager": m["name"], "cik": m["cik"], "filed": fl[0]["filed"], "period": fl[0]["period"], "n_positions": None,
+                         "prior_period": None, "not_filed_for": common})
+            print(f"  {m['name']}: latest 13F is for {fl[0]['period']} (not {common}); listed, not counted")
+            continue
         cur[m["name"]] = holdings_by_cusip(fetch_info_table(sec, int(m["cik"]), fl[0]["accession"]))
         if len(fl) > 1:
             pri[m["name"]] = holdings_by_cusip(fetch_info_table(sec, int(m["cik"]), fl[1]["accession"]))

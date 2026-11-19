@@ -1,30 +1,106 @@
 {
   "note": "The 13F managers CGI tracks (about 25, chosen 2026-11-19). 'cik' stays null until the EDGAR filer is confirmed: run `filings_build.py --resolve-managers`, check each match by eye, then fill in the number. Edit this file any time. No index giants (Vanguard, BlackRock): they hold everything and add only noise.",
   "managers": [
-    {"name": "Berkshire Hathaway", "cik": null},
-    {"name": "Bridgewater Associates", "cik": null},
-    {"name": "Renaissance Technologies", "cik": null},
-    {"name": "Citadel Advisors", "cik": null},
-    {"name": "Two Sigma Investments", "cik": null},
-    {"name": "D. E. Shaw", "cik": null},
-    {"name": "Millennium Management", "cik": null},
-    {"name": "AQR Capital Management", "cik": null},
-    {"name": "Point72 Asset Management", "cik": null},
-    {"name": "Tiger Global Management", "cik": null},
-    {"name": "Coatue Management", "cik": null},
-    {"name": "Viking Global Investors", "cik": null},
-    {"name": "Lone Pine Capital", "cik": null},
-    {"name": "Pershing Square Capital Management", "cik": null},
-    {"name": "Third Point", "cik": null},
-    {"name": "Elliott Investment Management", "cik": null},
-    {"name": "ValueAct Holdings", "cik": null},
-    {"name": "Greenlight Capital", "cik": null},
-    {"name": "Appaloosa", "cik": null},
-    {"name": "Baupost Group", "cik": null},
-    {"name": "Soros Fund Management", "cik": null},
-    {"name": "Duquesne Family Office", "cik": null},
-    {"name": "Scion Asset Management", "cik": null},
-    {"name": "Maverick Capital", "cik": null},
-    {"name": "Jana Partners", "cik": null}
-  ]
+    {
+      "name": "Berkshire Hathaway",
+      "cik": 1067983
+    },
+    {
+      "name": "Bridgewater Associates",
+      "cik": 1350694
+    },
+    {
+      "name": "Renaissance Technologies",
+      "cik": 1037389
+    },
+    {
+      "name": "Citadel Advisors",
+      "cik": 1423053
+    },
+    {
+      "name": "Two Sigma Investments",
+      "cik": 1179392
+    },
+    {
+      "name": "D. E. Shaw",
+      "cik": 1009207
+    },
+    {
+      "name": "Millennium Management",
+      "cik": 1273087
+    },
+    {
+      "name": "AQR Capital Management",
+      "cik": 1167557
+    },
+    {
+      "name": "Point72 Asset Management",
+      "cik": 1603466
+    },
+    {
+      "name": "Tiger Global Management",
+      "cik": 1167483
+    },
+    {
+      "name": "Coatue Management",
+      "cik": 1135730
+    },
+    {
+      "name": "Viking Global Investors",
+      "cik": 1103804
+    },
+    {
+      "name": "Lone Pine Capital",
+      "cik": 1061165
+    },
+    {
+      "name": "Pershing Square Capital Management",
+      "cik": 1336528
+    },
+    {
+      "name": "Third Point",
+      "cik": 1040273
+    },
+    {
+      "name": "Elliott Investment Management",
+      "cik": 1791786
+    },
+    {
+      "name": "ValueAct Holdings",
+      "cik": 1418814
+    },
+    {
+      "name": "Greenlight Capital",
+      "cik": 1079114
+    },
+    {
+      "name": "Appaloosa",
+      "cik": 1656456
+    },
+    {
+      "name": "Baupost Group",
+      "cik": 1061768
+    },
+    {
+      "name": "Soros Fund Management",
+      "cik": 1029160
+    },
+    {
+      "name": "Duquesne Family Office",
+      "cik": 1536411
+    },
+    {
+      "name": "Scion Asset Management",
+      "cik": 1649339
+    },
+    {
+      "name": "Maverick Capital",
+      "cik": 934639
+    },
+    {
+      "name": "Jana Partners",
+      "cik": 1998597
+    }
+  ],
+  "verified": "2026-11-19: each cik matched to its EDGAR registered name and latest 13F-HR date (D. E. Shaw & Co., Inc.; Baupost Group LLC/MA; Appaloosa LP; Maverick Capital Ltd; JANA Partners Management, LP). Pershing Square (latest 2026-03-31), Greenlight (2023-12-31) and Scion (2025-09-30) had no Q3 2026 13F-HR under these ciks, so the job lists them as not filed for the quarter instead of mixing quarters."
 }
