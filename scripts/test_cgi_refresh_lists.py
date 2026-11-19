@@ -35,6 +35,15 @@ class Diff(unittest.TestCase):
         self.assertEqual(p["hash"], r._hash(B))
 
 
+class NullId(unittest.TestCase):
+    def test_a_list_with_no_id_is_reported_and_never_keyed_as_none(self):
+        live = {"watchlists": [{"name": "CGI · now", "watchlist_id": "1", "symbols": A},
+                               {"name": "CGI · priced", "watchlist_id": None, "symbols": B}]}
+        with mock.patch.object(r, "_get", return_value=live):
+            desired, pending = r._desired_lists()
+        self.assertEqual((list(desired), pending), (["1"], ["CGI · priced"]))
+
+
 class Flow(unittest.TestCase):
     def setUp(self):
         d = tempfile.mkdtemp()

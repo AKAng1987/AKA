@@ -540,13 +540,25 @@ def diff_lists(desired: dict[str, list[str]], state: dict) -> list[dict]:
     return out
 
 
+def _desired_lists() -> tuple[dict[str, list[str]], list[str]]:
+    """({id: symbols} for lists that exist on TradingView, [names of lists with no id yet]). A list the API describes but whose
+    id is null ("CGI · priced" until Arvin approves creating it) is reported, never written and never keyed as "None"."""
+    ok, pending = {}, []
+    for w in _get("/api/watchlists")["watchlists"]:
+        if w.get("watchlist_id") in (None, "", "None"):
+            pending.append(w.get("name", "?"))
+        else:
+            ok[str(w["watchlist_id"])] = w["symbols"]
+    return ok, pending
+
+
 def lists_plan() -> int:
-    desired = {str(w["watchlist_id"]): w["symbols"] for w in _get("/api/watchlists")["watchlists"]}
+    desired, pending = _desired_lists()
     plan_ = diff_lists(desired, _lists_state())
     changed = [p for p in plan_ if p["action"] != "unchanged"]
-    print(json.dumps({"any_change": bool(changed), "lists": plan_}, indent=1, ensure_ascii=False))
+    print(json.dumps({"any_change": bool(changed), "lists": plan_, "needs_creation": pending}, indent=1, ensure_ascii=False))
     if not changed:
-        print("\n# all three lists match what was last written -- no TradingView call needed",
+        print("\n# all lists match what was last written -- no TradingView call needed",
               file=sys.stderr)
     return 0
 
@@ -554,7 +566,7 @@ def lists_plan() -> int:
 def lists_done(args: list[str]) -> int:
     """Record that lists were written. Refuses if the API's lists have moved since `plan`, so
     nothing is ever recorded as written that the model was not actually told to write."""
-    desired = {str(w["watchlist_id"]): w["symbols"] for w in _get("/api/watchlists")["watchlists"]}
+    desired, _ = _desired_lists()
     state, bad = _lists_state(), []
     for a in args:
         lid, _, h = a.partition("=")
@@ -578,7 +590,7 @@ def lists_verify() -> int:
     except json.JSONDecodeError as exc:
         print(f"stdin was not JSON: {exc}", file=sys.stderr)
         return 2
-    desired = {str(w["watchlist_id"]): w["symbols"] for w in _get("/api/watchlists")["watchlists"]}
+    desired, _ = _desired_lists()
     state, out = _lists_state(), []
     for lid, now in held.items():
         want = desired.get(lid)

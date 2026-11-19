@@ -1,5 +1,5 @@
 """
-cgi_watchlists.py -- Print the two TradingView watchlists CGI maintains:
+cgi_watchlists.py -- Print the TradingView regime watchlists CGI maintains (a third, "CGI · priced", has no TradingView id until approved):
 
   CGI · now            best 20 / worst 10 of the BACKTEST leaderboard, current regime
   CGI · if next flips  same for the regime we land in if the next release
@@ -79,10 +79,19 @@ def main() -> None:
     dest[model] = md._quadrant_with(cur[model], axis, 1 - s)
 
     out = []
-    for name, reg, note in (
+    regimes = [
         ("CGI · now", cur, f"current regime"),
         ("CGI · if next flips", dest, f"if {nxt['type']} on {nxt['date']} flips {axis}"),
-    ):
+    ]
+    try:   # mirror of api/watchlists.py: the priced regime (what markets price), additive
+        pr = md.build_markov_response()["priced_regime"]
+        if pr:
+            via = pr["via"]
+            pnote = ("PRICED: " + ", ".join(f"{v['axis']} {v['type']} {v['release_date']}" for v in via)) if via else "PRICED = DATA"
+            regimes.append(("CGI · priced", {"compass": pr["priced"]["compass"], "grid": pr["priced"]["grid"]}, pnote))
+    except Exception:  # noqa: BLE001
+        pass
+    for name, reg, note in regimes:
         min_occ = MIN_OCC
         rows = leaderboard(reg["compass"], reg["grid"], min_occ)
         if len(rows) < 5 and min_occ > 3:
