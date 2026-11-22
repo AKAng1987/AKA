@@ -243,7 +243,116 @@ def funds_summary(cur: dict, prior: dict, cmap: dict) -> dict:
     return out
 
 
-def manager_view(cur_h: dict, pri_h: dict | None, cmap: dict, top: int = 40) -> dict:
+FIGI_URL = "https://api.openfigi.com/v3/mapping"
+FIGI_CACHE = os.path.expanduser("~/.cgi/cusip_tickers.json")
+FIGI_BATCH = 10            # OpenFIGI without a key: 10 ids per request, 25 requests per minute
+FIGI_PAUSE = 2.6
+FIGI_RETRY_DAYS = 30       # a CUSIP with no ticker is asked again after this long
+FIGI_OK_TYPES = {"Common Stock", "ADR", "REIT", "ETP", "GDR", "Closed-End Fund", "Open-End Fund", "Preference", "Right", "Unit", "Tracking Stk", "Mutual Fund"}
+
+
+def figi_pick(data: list | None) -> dict | None:
+    """One OpenFIGI answer (a list of listings) -> {ticker, name, type}: the US composite listing (exchCode US) if present."""
+    if not data:
+        return None
+    us = [d for d in data if d.get("exchCode") == "US" and d.get("ticker")]
+    d = (us or [x for x in data if x.get("ticker")] or [None])[0]
+    return {"ticker": d["ticker"], "name": d.get("name"), "type": d.get("securityType")} if d else None
+
+
+def figi_cache_load() -> dict:
+    try:
+        return json.load(open(FIGI_CACHE))
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+def figi_cache_save(c: dict) -> None:
+    os.makedirs(os.path.dirname(FIGI_CACHE), exist_ok=True)
+    json.dump(c, open(FIGI_CACHE, "w"))
+
+
+def figi_wanted(cusips: list, cache: dict, today: str) -> list:
+    """CUSIPs that still need a lookup: never asked, or asked more than FIGI_RETRY_DAYS ago and found nothing."""
+    out = []
+    for c in cusips:
+        e = cache.get(c)
+        if e is None:
+            out.append(c)
+        elif not e.get("ticker") and (dt.date.fromisoformat(today) - dt.date.fromisoformat(e.get("asked", today))).days >= FIGI_RETRY_DAYS:
+            out.append(c)
+    return out
+
+
+def figi_fill(cusips: list, cache: dict, budget: int | None = None, today: str | None = None) -> dict:
+    """Look the missing CUSIPs up on OpenFIGI (a free public mapping service; only CUSIPs are sent, no personal data). budget = the most
+    requests to make this run (None = until done). Progress is saved as it goes, so a stopped run resumes where it left off."""
+    today = today or dt.date.today().isoformat()
+    todo = figi_wanted(cusips, cache, today)
+    n_req = 0
+    for i in range(0, len(todo), FIGI_BATCH):
+        if budget is not None and n_req >= budget:
+            break
+        batch = todo[i:i + FIGI_BATCH]
+        body = json.dumps([{"idType": "ID_CUSIP", "idValue": c} for c in batch]).encode()
+        res = None
+        for attempt in range(4):
+            try:
+                req = urllib.request.Request(FIGI_URL, data=body, headers={"Content-Type": "application/json"})
+                res = json.loads(urllib.request.urlopen(req, timeout=60).read())
+                break
+            except urllib.error.HTTPError as e:
+                time.sleep(30 if e.code == 429 else 5 * (attempt + 1))
+            except Exception:  # noqa: BLE001
+                time.sleep(5 * (attempt + 1))
+        n_req += 1
+        if res is None or len(res) != len(batch):
+            continue
+        for c, o in zip(batch, res):
+            hit = figi_pick(o.get("data")) if isinstance(o, dict) else None
+            cache[c] = {**(hit or {"ticker": None}), "asked": today}
+        if n_req % 20 == 0:
+            figi_cache_save(cache)
+            print(f"  openfigi: {len(cache)} cusips looked up so far", flush=True)
+        time.sleep(FIGI_PAUSE)
+    figi_cache_save(cache)
+    return cache
+
+
+def holdings_rows(cur: dict, pri: dict, symmap: dict) -> list:
+    """Every name held by at least one tracked manager: ticker, issuer, how many hold it, what changed, total value. Needs a prior quarter
+    for the added/reduced counts (they are 0 without one)."""
+    agg: dict = {}
+
+    def row(c, h):
+        return agg.setdefault(c, {"cusip": c, "ticker": symmap.get(c), "name": h["issuer"], "holders": 0, "adds": 0, "cuts": 0, "new": 0,
+                                  "exited": 0, "value": 0.0})
+
+    for mgr, hs in cur.items():
+        p = pri.get(mgr)
+        for c, h in hs.items():
+            a = row(c, h)
+            a["holders"] += 1
+            a["value"] += h["value"]
+            if p is not None:
+                b = p.get(c, {}).get("shares")
+                if b is None:
+                    a["new"] += 1
+                elif h["shares"] > b:
+                    a["adds"] += 1
+                elif h["shares"] < b:
+                    a["cuts"] += 1
+        if p is not None:
+            for c, h in p.items():
+                if c not in hs:
+                    row(c, h)["exited"] += 1
+    rows = [r for r in agg.values() if r["holders"] > 0]
+    for r in rows:
+        r["value"] = round(r["value"])
+    return sorted(rows, key=lambda r: (-r["holders"], -r["value"]))
+
+
+def manager_view(cur_h: dict, pri_h: dict | None, cmap: dict, top: int = 40, keep: set | None = None) -> dict:
     """One manager's book: largest positions (plus any position in the Fundamentals universe), what changed against the prior quarter, and
     what was exited. cur_h / pri_h = {cusip: {issuer, shares, value}} (equity only). Values are dollars."""
     total = sum(h["value"] for h in cur_h.values())
@@ -264,11 +373,11 @@ def manager_view(cur_h: dict, pri_h: dict | None, cmap: dict, top: int = 40) -> 
                      "weight_pct": round(h["value"] / total * 100, 2) if total else None, "change": change,
                      "change_pct": round((h["shares"] / before - 1) * 100, 1) if before else None})
     rows.sort(key=lambda r: -r["value"])
-    keep = rows[:top] + [r for r in rows[top:] if r["symbol"]]
+    kept = rows[:top] + [r for r in rows[top:] if ((r["cusip"] in keep) if keep is not None else r["symbol"])]
     exited = sorted(({"cusip": c, "issuer": h["issuer"], "symbol": cmap.get(c), "prior_value": h["value"]}
                      for c, h in (pri_h or {}).items() if c not in cur_h), key=lambda x: -x["prior_value"])[:10]
     return {"total_value": total, "n_positions": len(cur_h), "top10_share": round(sum(r["value"] for r in rows[:10]) / total * 100, 1) if total else None,
-            "holdings": keep, "exited": exited}
+            "holdings": kept, "exited": exited}
 
 
 def crowd(cur: dict, pri: dict, cmap: dict, top: int = 25) -> dict:
@@ -530,12 +639,22 @@ def run_13f(sec: Sec, uni: dict, dry: bool) -> int:
     if len(rows) < 0.6 * len(mgrs):
         print("REFUSING to upload: under 60% of the managers could be read")
         return 1
-    by_manager = {m: manager_view(h, pri.get(m), cmap) for m, h in cur.items()}
-    crowd_all = crowd(cur, pri, cmap)
+    figi = figi_cache_load()
+    allc = sorted({c for d in (cur, pri) for mg in d.values() for c in mg})
+    figi = figi_fill(allc, figi, budget=None if "--map-all" in sys.argv else 40)
+    symmap = {**{c: v["ticker"] for c, v in figi.items() if v.get("ticker")}, **cmap}      # the universe symbol wins, then OpenFIGI
+    by_manager = {m: manager_view(h, pri.get(m), symmap, keep=set(cmap)) for m, h in cur.items()}
+    crowd_all = crowd(cur, pri, symmap)
+    hold_rows = holdings_rows(cur, pri, symmap)
+    n_tick = sum(1 for r in hold_rows if r["ticker"])
+    print(f"all holdings: {len(hold_rows)} names held by at least one tracked manager, {n_tick} with a ticker ({round(n_tick / max(len(hold_rows), 1) * 100)}%)")
     s3_put("funds.json", {"asof": dt.date.today().isoformat(), "period": max(periods) if periods else None,
                           "filed_by": max(r["filed"] for r in rows), "managers": rows, "mapping": rep, "summary": summ,
                           "by_manager": by_manager, "crowd": crowd_all,
                           "note": "13F: long US positions of tracked managers, up to 4.5 months old; crowding, not a signal"})
+    s3_put("holdings_all.json", {"asof": dt.date.today().isoformat(), "period": max(periods) if periods else None, "n": len(hold_rows),
+                                 "n_with_ticker": n_tick, "n_managers": len(cur), "rows": hold_rows,
+                                 "note": "Every name held by a tracked manager (13F, long US equity positions). Added/reduced = managers that raised or cut shares."})
     meta = s3_get("meta.json") or {}
     meta["f13_period"] = max(periods) if periods else None
     meta["updated"] = dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")

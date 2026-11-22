@@ -120,6 +120,20 @@ check("crowd: most held order", [r["issuer"] for r in cw["most_held"]][:2], ["AL
 check("crowd: most added includes DELTA (new) and the adds", sorted(r["issuer"] for r in cw["most_added"]), ["ALPHA", "BETA", "DELTA"])
 check("crowd: most reduced includes the exit GAMMA and the BETA cut", sorted(r["issuer"] for r in cw["most_reduced"]), ["BETA", "GAMMA"])
 check("crowd: counts", (cw["n_managers"], cw["n_with_prior"]), (2, 2))
+check("figi pick: the US composite listing wins", F.figi_pick([{"ticker": "NVDA", "exchCode": "UN", "name": "NVIDIA CORP", "securityType": "Common Stock"},
+                                                              {"ticker": "NVDA", "exchCode": "US", "name": "NVIDIA CORP", "securityType": "Common Stock"}]),
+      {"ticker": "NVDA", "name": "NVIDIA CORP", "type": "Common Stock"})
+check("figi pick: no data, no ticker", (F.figi_pick(None), F.figi_pick([{"exchCode": "US"}])), (None, None))
+fc = {"C1": {"ticker": "AAA", "asked": "2026-11-01"}, "C2": {"ticker": None, "asked": "2026-11-01"}, "C3": {"ticker": None, "asked": "2026-09-01"}}
+check("figi wanted: new ones and old misses, not fresh misses or hits", F.figi_wanted(["C1", "C2", "C3", "C4"], fc, "2026-11-19"), ["C3", "C4"])
+hr = F.holdings_rows(cur2, pri2, {"C1": "AAA"})
+check("holdings rows: all held names, most held first", [(r["name"], r["holders"]) for r in hr], [("ALPHA", 2), ("BETA", 2), ("DELTA", 1)])
+check("holdings rows: ticker, adds, cuts, new", {r["name"]: (r["ticker"], r["adds"], r["cuts"], r["new"]) for r in hr},
+      {"ALPHA": ("AAA", 1, 0, 0), "BETA": (None, 1, 1, 0), "DELTA": (None, 0, 0, 1)})
+check("holdings rows: exited positions are not in the held list", [r["name"] for r in hr if r["name"] == "GAMMA"], [])
+big = {"C%d" % i: {"issuer": "N%d" % i, "shares": 10.0, "value": 100.0 - i} for i in range(6)}
+mk = F.manager_view(big, {}, {"C5": "ZZZ"}, top=2, keep={"C5"})
+check("manager view keeps the top N plus only the universe names beyond it", [r["cusip"] for r in mk["holdings"]], ["C0", "C1", "C5"])
 
 D13 ="<edgarSubmission><formData><coverPageHeader><reportingPersonName>BIG HOLDER LP</reportingPersonName></coverPageHeader><percentOfClass>7.4</percentOfClass></formData></edgarSubmission>"
 check("13D: stake and filer when present", F.parse_13d(D13, "SCHEDULE 13D"), {"stake_pct": 7.4, "filer": "BIG HOLDER LP"})
