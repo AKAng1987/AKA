@@ -54,8 +54,23 @@ def build(eh, td, skip: set) -> dict:
     return {"as_of": dt.date.today().isoformat(), "top_per_theme": TOP_PER_THEME, "constituents": out, "provenance": prov}
 
 
+def wait_for_network(host: str = "www.sec.gov", minutes: int = 10) -> bool:
+    """A Mac that has just woken often has no DNS for a minute or two; wait for it instead of failing."""
+    import socket
+    import time
+
+    for _ in range(minutes * 4):
+        try:
+            socket.gethostbyname(host)
+            return True
+        except OSError:
+            time.sleep(15)
+    return False
+
+
 def main() -> int:
     dry = "--dry-run" in sys.argv
+    wait_for_network()
     import etf_holdings as eh
     import themes_data as td
 
