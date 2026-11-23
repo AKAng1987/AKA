@@ -138,8 +138,24 @@ def s3():
     return boto3.client("s3", region_name=REGION)
 
 
+def wait_for_network(host: str = "scanner.tradingview.com", minutes: int = 10) -> bool:
+    """A Mac that has just woken often has no DNS for a minute or two (the earlier runs failed with 'nodename nor servname provided').
+    Wait for it rather than give up."""
+    import socket
+    import time
+
+    for _ in range(minutes * 4):
+        try:
+            socket.gethostbyname(host)
+            return True
+        except OSError:
+            time.sleep(15)
+    return False
+
+
 def main() -> int:
     dry = "--dry-run" in sys.argv
+    wait_for_network()
     names = universe()
     rows, unresolved = fetch(names)
     today = dt.date.today().isoformat()

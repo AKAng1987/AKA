@@ -663,8 +663,23 @@ def run_13f(sec: Sec, uni: dict, dry: bool) -> int:
     return 0
 
 
+def wait_for_network(host: str = "www.sec.gov", minutes: int = 10) -> bool:
+    """A Mac that has just woken often has no DNS for a minute or two (2026-11-21: the 07:30 run failed with 'nodename nor servname
+    provided'). Wait for it rather than give up; the job still refuses to upload when nothing could be read."""
+    import socket
+
+    for _ in range(minutes * 4):
+        try:
+            socket.gethostbyname(host)
+            return True
+        except OSError:
+            time.sleep(15)
+    return False
+
+
 def main() -> int:
     dry = "--dry-run" in sys.argv
+    wait_for_network()
     sec = Sec(load_ua())
     if "--resolve-managers" in sys.argv:
         return resolve_managers(sec)
