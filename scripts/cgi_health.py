@@ -55,6 +55,37 @@ def _days_before(iso: str, n: int) -> str:
     return (dt.date.fromisoformat(iso) - dt.timedelta(days=n)).isoformat()
 
 
+def extra_sections(f: dict, lines: list, amber: list) -> None:
+    """Sections of /api/freshness that health used to skip (added 2026-11-25, handoff 18): a problem the gate counts must show here.
+    On 2026-11-24 a BITO split alert in price_jumps made safe_to_act_on false while health said GREEN."""
+    labels = (("price_jumps", "price jump"), ("peer_lag", "peer lag"), ("erp", "erp"), ("earnings_calendar", "earnings calendar"),
+              ("filings", "filings"), ("automated", "fred"), ("manual", "manual"))
+    for key, label in labels:
+        sec = f.get(key)
+        if not isinstance(sec, dict):
+            continue
+        n = sec.get("n_problems", 0) or sec.get("n_never_loaded", 0)
+        lines.append(f"{label:<9} {n} problems" + (f" ({sec.get('checked')} checked)" if sec.get("checked") is not None else ""))
+        items = []
+        if key == "automated":
+            items = [f"fred {s['symbol']}: {s.get('detail', s.get('status'))}" for s in sec.get("series", [])
+                     if s.get("status") not in (None, "current")]
+        elif key == "manual":
+            if sec.get("n_never_loaded"):
+                items = [f"manual never loaded: {sec.get('unresolved')}"]
+        elif key == "erp":
+            if sec.get("behind"):
+                items = [f"erp behind its source: newest {sec.get('newest_month')}, expected {sec.get('expected_month')}"]
+        else:
+            items = [f"{label} {p.get('symbol') or p.get('check') or ''}: {p.get('detail', p)}".replace("  ", " ")
+                     for p in sec.get("problems", [])]
+        if n and not items:
+            items = [f"{label}: {n} problems reported, no detail given"]
+        amber.extend(items)
+        if sec.get("error"):
+            amber.append(f"{label} check could not run: {sec['error']}")
+
+
 def main() -> int:
     as_json = "--json" in sys.argv   # machine-readable verdict for cgi_repair.py; no events are logged in this mode
     red, amber, lines = [], [], []
@@ -146,6 +177,8 @@ def main() -> int:
         if rp.get("error"):
             amber.append(f"rate path check could not run: {rp['error']}")
 
+    extra_sections(f, lines, amber)
+
     try:
         behind = tape_behind()
         lines.append(f"tape      {len(behind)} daily rows >1 trading day behind (weekly series excluded)"
@@ -161,6 +194,11 @@ def main() -> int:
         lines.append(f"regime    {reg['headline'] if reg else 'unavailable'}")
     except Exception as exc:  # noqa: BLE001
         amber.append(f"could not read brief: {exc}")
+
+    # Catch-all: the gate's total must be explained. A section added to freshness.py later and not read here shows up as this line.
+    if (f.get("n_problems") or 0) > 0 and not red and not amber:
+        nz = [k for k, v in f.items() if isinstance(v, dict) and (v.get("n_problems") or v.get("n_never_loaded"))]
+        amber.append(f"freshness reports {f['n_problems']} problems that health does not explain: {', '.join(nz) or 'unknown section'}")
 
     verdict = "RED" if red else "AMBER" if amber else "GREEN"
     if as_json:

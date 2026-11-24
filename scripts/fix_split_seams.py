@@ -21,7 +21,7 @@ import boto3
 
 DRY_RUN = os.environ.get("DRY_RUN", "True").lower() != "false"
 ONLY = {s for s in os.environ.get("ONLY", "").split(",") if s}
-CONFIRMED = {"SOXX", "ITA"}          # Yahoo-written seams (no split_factor); confirmed against TradingView adjusted closes
+CONFIRMED = {"SOXX", "ITA", "BITO"}  # Yahoo-written seams (no split_factor); confirmed against TradingView adjusted closes (BITO 2026-11-25: 18.30 on 13 Nov vs our 9.15, 2:1 reverse split, seam 16 Nov)
 REGION, TABLE, REG = "ap-southeast-1", "cmon-stage-backend-price-history", "cmon-stage-backend-metrics-source"
 SPLIT_TOL = 0.06
 ddb = boto3.client("dynamodb", region_name=REGION)

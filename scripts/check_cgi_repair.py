@@ -29,6 +29,8 @@ check("referee mismatch is never auto-fixed", c("referee close_mismatch SPX: 1% 
 check("referee with no bars goes to Claude", c("referee received no TradingView bars from the last refresh"), ("claude", "refresh_routine"))
 check("routine not run goes to Claude", c("refresh routine has not run in 60h+"), ("claude", "refresh_routine"))
 check("calendar dates missing is a code fault", c("release calendar coverage: no CPI date in 75 days")[0], "code")
+check("price jump is a code fault held for his yes", c("price jump BITO: 2026-11-13 9.15 -> 2026-11-16 17.26 (x1.89) looks like a 1:2 split"), ("code", "split_seam"))
+check("FRED copy behind waits for the nightly job", c("fred DFF: FRED has 2026-11-23, we hold 2026-11-20 -- the copy is behind"), ("wait", "provider_late"))
 check("PH problem re-runs the PH job", c("ph prices: stale")[1], "ph_daily")
 check("unknown goes to Claude", c("something new")[0], "claude")
 
@@ -53,6 +55,29 @@ check("pause lever exits first", R.main(), 0)
 src = inspect.getsource(R.run_play)
 bad = [w for w in ("put-item", "batch-write", "delete-item", "dynamodb", "pulse", "orders", "git push") if w in src.lower()]
 check("run_play names no write tool", bad, [])
+
+# mocked freshness with ONLY a price_jumps problem: health must go AMBER (it said GREEN on 2026-11-24)
+import json as _json, io, contextlib  # noqa: E402
+import cgi_health as H  # noqa: E402
+_f = {"as_of": "2026-11-24", "n_problems": 1, "refresh_routine": {"age_hours": 5, "ran": "ok"}, "referee": {"checked": 15, "n_problems": 0, "problems": []},
+      "price_jumps": {"problems": [{"symbol": "BITO", "detail": "2026-11-13 9.15 -> 2026-11-16 17.26 (x1.89) looks like a 1:2 split"}], "n_problems": 1, "checked": 194}}
+H._get = lambda path: _json.dumps(_f) if path == "/api/freshness" else _json.dumps({"sections": []}) if path.startswith("/api/brief") else ""
+H.tape_behind = lambda: []
+sys.argv = ["cgi_health.py", "--json"]
+_buf = io.StringIO()
+with contextlib.redirect_stdout(_buf):
+    H.main()
+_v = _json.loads(_buf.getvalue())
+check("health is AMBER when only price_jumps has a problem", _v["verdict"], "AMBER")
+check("the amber item names BITO", any("BITO" in a for a in _v["amber"]), True)
+_f2 = {"as_of": "2026-11-24", "n_problems": 2, "refresh_routine": {"age_hours": 5, "ran": "ok"}, "referee": {"checked": 15, "n_problems": 0, "problems": []},
+       "brand_new_section": {"n_problems": 2}}
+H._get = lambda path: _json.dumps(_f2) if path == "/api/freshness" else _json.dumps({"sections": []})
+_buf = io.StringIO()
+with contextlib.redirect_stdout(_buf):
+    H.main()
+_v = _json.loads(_buf.getvalue())
+check("catch-all flags an unread section", (_v["verdict"], any("does not explain" in a for a in _v["amber"])), ("AMBER", True))
 
 print("PASS" if not fails else f"{fails} FAILED")
 sys.exit(1 if fails else 0)

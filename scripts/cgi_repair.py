@@ -68,6 +68,10 @@ def classify(text: str, prior_attempts: int = 0) -> tuple[str, str]:
         return "fix", "ph_daily"
     if low.startswith("release calendar"):
         return "code", "calendar_dates"
+    if low.startswith("price jump"):
+        return "code", "split_seam"           # rewrites stored prices (fix_split_seams.py): held for Arvin's yes, never auto-run
+    if low.startswith("fred "):
+        return "wait", "provider_late"        # the nightly FRED copy catches up on its own; health keeps showing it until it does
     if low.startswith("gdp"):
         return "claude", "gdp"
     if low.startswith("rate path"):
