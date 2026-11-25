@@ -12,6 +12,8 @@ S=/Users/christinatan/market-dashboard/scripts
 cd /Users/christinatan/cgi-vercel || exit 1
 DOW=$(date +%u)
 START=$(date -u +%Y-%m-%dT%H:%M:%SZ)   # run check counts a snapshot as stored by this run if written after this, however long the run takes
+# A Mac that has just woken often has no DNS for a minute or two: wait up to 10 minutes rather than read "no snapshot" from S3.
+for i in $(seq 1 40); do /usr/bin/host -W 3 www.sec.gov >/dev/null 2>&1 && break; sleep 15; done
 echo "=== $(date '+%Y-%m-%d %H:%M:%S') ph_daily (weekday $DOW)"
 $PY -u $S/ph_edge_build.py --days 4 --upload --notify || echo "edge build failed"
 $PY -u $S/ph_index_watch.py --upload --notify || echo "index watch failed"

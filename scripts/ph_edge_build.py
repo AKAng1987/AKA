@@ -168,6 +168,7 @@ def main() -> int:
     ap.add_argument("--from", dest="src")
     ap.add_argument("--prev", help="start from this local snapshot instead of the stored one")
     ap.add_argument("--notify", action="store_true")
+    ap.add_argument("--allow-fresh", action="store_true", help="first run only: upload even when no previous snapshot can be read")
     a = ap.parse_args()
     a_notify = a.notify
     import ph_data
@@ -176,6 +177,9 @@ def main() -> int:
         snap = json.load(open(a.src))
     else:
         prev = json.load(open(a.prev)) if a.prev else ph_data.read_blob("edge") if a.upload else None
+        if a.upload and not a.prev and prev is None and not a.allow_fresh:
+            # 2026-11-24: S3 was unreachable after a wake, the job read "no previous snapshot" and overwrote 1.2 MB of history with 86 KB.
+            return _fail("refusing to run: the stored snapshot could not be read (network or S3). Not building from nothing; use --allow-fresh only for a first run")
         try:
             snap = build(prev, a.days, a.max_filings, a.history, a.detail_days)
         except Exception as e:  # noqa: BLE001
@@ -194,6 +198,10 @@ def main() -> int:
             return _fail("refusing to upload: no disclosures at all")
         if tried >= 5 and lr.get("n_failed", 0) > 0.3 * tried:
             return _fail(f"refusing to upload: {lr['n_failed']} of {tried} filings failed to parse")
+        if prev:
+            for k in ("disclosures", "results", "buybacks"):
+                if len(prev.get(k, [])) >= 20 and len(snap.get(k, [])) < 0.9 * len(prev[k]):
+                    return _fail(f"refusing to upload: {k} fell from {len(prev[k])} to {len(snap.get(k, []))}")
         ph_data.write_blob("edge", snap)
         print("stored ph/edge.json")
     return 0
