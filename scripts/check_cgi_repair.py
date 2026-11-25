@@ -79,5 +79,13 @@ with contextlib.redirect_stdout(_buf):
 _v = _json.loads(_buf.getvalue())
 check("catch-all flags an unread section", (_v["verdict"], any("does not explain" in a for a in _v["amber"])), ("AMBER", True))
 
+_f3 = {"as_of": "2026-11-25", "n_problems": 0, "refresh_routine": {"age_hours": 5, "ran": "ok"}, "referee": {"checked": 15, "n_problems": 0, "problems": []},
+       "automated": {"n_problems": 0, "problems": [], "series": [{"symbol": "DGS10", "status": "leads_source", "detail": "Not a defect."}, {"symbol": "DFF", "status": "current"}]}}
+H._get = lambda path: _json.dumps(_f3) if path == "/api/freshness" else _json.dumps({"sections": []})
+_buf = io.StringIO()
+with contextlib.redirect_stdout(_buf):
+    H.main()
+check("a FRED leads_source row is not flagged", _json.loads(_buf.getvalue())["verdict"], "GREEN")
+
 print("PASS" if not fails else f"{fails} FAILED")
 sys.exit(1 if fails else 0)

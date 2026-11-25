@@ -68,8 +68,9 @@ def extra_sections(f: dict, lines: list, amber: list) -> None:
         lines.append(f"{label:<9} {n} problems" + (f" ({sec.get('checked')} checked)" if sec.get("checked") is not None else ""))
         items = []
         if key == "automated":
+            bad = set(sec.get("problems", []))   # the server's own verdict: leads_source (a faster provider) is "not a defect"
             items = [f"fred {s['symbol']}: {s.get('detail', s.get('status'))}" for s in sec.get("series", [])
-                     if s.get("status") not in (None, "current")]
+                     if s.get("symbol") in bad]
         elif key == "manual":
             if sec.get("n_never_loaded"):
                 items = [f"manual never loaded: {sec.get('unresolved')}"]
